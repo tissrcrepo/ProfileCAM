@@ -120,7 +120,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
     <PostBuildEvent>
-      <Command>"C:\Program Files (x86)\NSIS\makensisw.exe" "$(ProjectDir)FChassisInstallerBuild-V33.nsi"</Command>
+      <Command>"C:\Program Files (x86)\NSIS\makensisw.exe" "$(ProjectDir)FChassisInstallerBuild-V34.nsi"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -139,7 +139,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
     <PostBuildEvent>
-      <Command>"C:\Program Files (x86)\NSIS\makensisw.exe" "$(ProjectDir)FChassisInstallerBuild-V33.nsi"</Command>
+      <Command>"C:\Program Files (x86)\NSIS\makensisw.exe" "$(ProjectDir)FChassisInstallerBuild-V34.nsi"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

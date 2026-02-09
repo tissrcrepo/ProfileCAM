@@ -24,7 +24,7 @@
 		<Company>TeckinSoft Neuronics Pvt Ltd</Company>
 		<Description>G Code genetrator for Proteck Dual Head Laser Cutting Machine</Description>
 		<PackageProjectUrl>https://www.teckinsoft.in/</PackageProjectUrl>
-		<Version>1.0.24 </Version>
+		<Version>1.0.25</Version>
 	</PropertyGroup>
 
 	<!-- Configuration-specific constants -->
