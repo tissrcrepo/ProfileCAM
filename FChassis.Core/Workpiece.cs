@@ -114,7 +114,7 @@ public class Workpiece : INotifyPropertyChanged {
             bool toTreatAsCutOut = CutOut.ToTreatAsCutOut (cut.Segs, Bound, It.MinCutOutLengthThreshold);
             if (toTreatAsCutOut) {
                cut.CutoutKind = Tooling.GetCutKind (cut, GCodeGenerator.GetXForm (this));
-               cut.ProfileKind = Tooling.GetCutKind (cut, XForm4.IdentityXfm);
+               cut.ProfileKind = Tooling.GetCutKind (cut, XForm4.IdentityXfm, profileKind: true);
                cut.Kind = EKind.Cutout;
             }
             Cuts.Add (cut);
@@ -383,12 +383,12 @@ public class Workpiece : INotifyPropertyChanged {
                cut.Reverse ();
             cutSegs = [.. cut.Segs];
             cut.CutoutKind = Tooling.GetCutKind (cut, GCodeGenerator.GetXForm (this));
-            cut.ProfileKind = Tooling.GetCutKind (cut, XForm4.IdentityXfm);
+            cut.ProfileKind = Tooling.GetCutKind (cut, XForm4.IdentityXfm, profileKind: true);
          } else {
             if (!It.CutNotches)
                continue;
             cut.NotchKind = Tooling.GetCutKind (cut, GCodeGenerator.GetXForm (this));
-            cut.ProfileKind = Tooling.GetCutKind (cut, XForm4.IdentityXfm);
+            cut.ProfileKind = Tooling.GetCutKind (cut, XForm4.IdentityXfm, profileKind: true);
             var NotchStFlType = Utils.GetArcPlaneFlangeType (cutSegs.First ().Vec0,
                                                              GCodeGenerator.GetXForm (this));
             var NotchEndFlType = Utils.GetArcPlaneFlangeType (cutSegs[^1].Vec1,

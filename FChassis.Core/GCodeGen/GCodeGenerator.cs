@@ -1366,7 +1366,7 @@ public class GCodeGenerator {
             cut.CutoutKind = Tooling.GetCutKind (cut, GetXForm ());
          else if (cut.Kind == EKind.Notch)
             cut.NotchKind = Tooling.GetCutKind (cut, GetXForm ());
-         cut.ProfileKind = Tooling.GetCutKind (cut, XForm4.IdentityXfm);
+         cut.ProfileKind = Tooling.GetCutKind (cut, XForm4.IdentityXfm, profileKind: true);
       }
       // Compute the splitPartition
       var xPartition = GetXPartition (mcCutScope.Toolings);

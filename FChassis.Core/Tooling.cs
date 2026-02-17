@@ -385,7 +385,7 @@ public class Tooling {
       return new (pt2.X, pt2.Y);
    }
 
-   public static ECutKind GetCutKind (Tooling cut, XForm4 trf) {
+   public static ECutKind GetCutKind (Tooling cut, XForm4 trf, bool profileKind = false) {
       var segs = cut.Segs;
       ECutKind cutKindAtFlex = ECutKind.None, cutKindAtFlange = ECutKind.None;
       bool YNegPlaneFeat = segs.Any (cutSeg => (((trf * cutSeg.Vec0.Normalized ()).Y).EQ (-1) && ((trf * cutSeg.Vec1.Normalized ()).Y).EQ (-1)));
@@ -421,7 +421,7 @@ public class Tooling {
 
 
       // Correction for RH Component
-      if (MCSettings.It.PartConfig == MCSettings.PartConfigType.RHComponent) {
+      if (/*!profileKind  && */MCSettings.It.PartConfig == MCSettings.PartConfigType.RHComponent) {
          switch (cutKindAtFlex) {
             case ECutKind.YNegFlex:
                cutKindAtFlex = ECutKind.YPosFlex;
