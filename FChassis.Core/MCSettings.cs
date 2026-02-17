@@ -57,11 +57,11 @@ public partial class MCSettings : INotifyPropertyChanged {
       LeastWJLength = 0.24999999999999999999999;
       mLeadInApproachArcAngle = 90.0;
 #if DEBUG
-      Version = "Debug 92";
+      Version = "Debug 93";
 #elif TESTRELEASE
-      Version = " Test Release 92";
+      Version = " Test Release 93";
 #else
-      Version = "1.0.26"; 
+      Version = "1.0.27"; 
 #endif
    }
    #endregion

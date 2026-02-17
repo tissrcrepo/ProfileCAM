@@ -1,5 +1,5 @@
 ; -----------------------------------------------------------------------------
-; FChassis Installer - Version 1.0.26
+; FChassis Installer - Version 1.0.27
 ; -----------------------------------------------------------------------------
 !include "x64.nsh"
 !include "LogicLib.nsh"
@@ -13,7 +13,7 @@
 ; General Settings
 ; -----------------------------------------------------------------------------
 !define APPNAME "FChassis"
-!define VERSION "1.0.26" 
+!define VERSION "1.0.27" 
 !define COMPANY "Teckinsoft Neuronics Pvt. Ltd."
 !define INSTALLDIR "C:\FChassis"
 !define FluxSDKBin "C:\FluxSDK\Bin"
