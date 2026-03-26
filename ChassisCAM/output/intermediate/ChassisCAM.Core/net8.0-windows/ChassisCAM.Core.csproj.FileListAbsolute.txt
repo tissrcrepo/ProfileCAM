@@ -1,0 +1,15 @@
+C:\FluxSDK\Bin\ChassisCAM.Core.deps.json
+C:\FluxSDK\Bin\ChassisCAM.Core.dll
+C:\FluxSDK\Bin\ChassisCAM.Core.pdb
+C:\FluxSDK\Bin\BinChassisCAM.Core.xml
+C:\Users\Parthasarathy.LAP-TK01\Workspaces\TeckInSoft\CCAM\ChassisCAM\ChassisCAM\output\intermediate\ChassisCAM.Core\net8.0-windows\ChassisCAM.Core.csproj.AssemblyReference.cache
+C:\Users\Parthasarathy.LAP-TK01\Workspaces\TeckInSoft\CCAM\ChassisCAM\ChassisCAM\output\intermediate\ChassisCAM.Core\net8.0-windows\ChassisCAM.Core.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\Parthasarathy.LAP-TK01\Workspaces\TeckInSoft\CCAM\ChassisCAM\ChassisCAM\output\intermediate\ChassisCAM.Core\net8.0-windows\ChassisCAM.Core.AssemblyInfoInputs.cache
+C:\Users\Parthasarathy.LAP-TK01\Workspaces\TeckInSoft\CCAM\ChassisCAM\ChassisCAM\output\intermediate\ChassisCAM.Core\net8.0-windows\ChassisCAM.Core.AssemblyInfo.cs
+C:\Users\Parthasarathy.LAP-TK01\Workspaces\TeckInSoft\CCAM\ChassisCAM\ChassisCAM\output\intermediate\ChassisCAM.Core\net8.0-windows\ChassisCAM.Core.csproj.CoreCompileInputs.cache
+C:\Users\Parthasarathy.LAP-TK01\Workspaces\TeckInSoft\CCAM\ChassisCAM\ChassisCAM\output\intermediate\ChassisCAM.Core\net8.0-windows\ChassisCAM.Core.sourcelink.json
+C:\Users\Parthasarathy.LAP-TK01\Workspaces\TeckInSoft\CCAM\ChassisCAM\ChassisCAM\output\intermediate\ChassisCAM.Core\net8.0-windows\ChassisC.B4B5DC99.Up2Date
+C:\Users\Parthasarathy.LAP-TK01\Workspaces\TeckInSoft\CCAM\ChassisCAM\ChassisCAM\output\intermediate\ChassisCAM.Core\net8.0-windows\ChassisCAM.Core.dll
+C:\Users\Parthasarathy.LAP-TK01\Workspaces\TeckInSoft\CCAM\ChassisCAM\ChassisCAM\output\intermediate\ChassisCAM.Core\net8.0-windows\refint\ChassisCAM.Core.dll
+C:\Users\Parthasarathy.LAP-TK01\Workspaces\TeckInSoft\CCAM\ChassisCAM\ChassisCAM\output\intermediate\ChassisCAM.Core\net8.0-windows\ChassisCAM.Core.pdb
+C:\Users\Parthasarathy.LAP-TK01\Workspaces\TeckInSoft\CCAM\ChassisCAM\ChassisCAM\output\intermediate\ChassisCAM.Core\net8.0-windows\ref\ChassisCAM.Core.dll

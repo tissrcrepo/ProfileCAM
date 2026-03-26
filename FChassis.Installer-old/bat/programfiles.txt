@@ -1,4 +1,0 @@
-FChassis.exe
-FChassis.dll
-FChassis.deps.json
-FChassis.runtimeconfig.json

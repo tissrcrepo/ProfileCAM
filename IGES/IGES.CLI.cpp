@@ -15,7 +15,7 @@ using namespace System::Runtime::InteropServices;
 // Declare CleanupTCL() as an external function
 extern "C" void CleanupOCCT(); //Allows C++/CLI to call it
 
-namespace FChassis::IGES {
+namespace ChassisCAM::IGES {
 
    IGES::IGES() : pPriv(nullptr) {}
 

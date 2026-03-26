@@ -9,14 +9,14 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Reference Include="FChassis.Core">
-      <HintPath>..\..\..\..\..\..\FluxSDK\Bin\FChassis.Core.dll</HintPath>
+    <Reference Include="ChassisCAM.Core">
+      <HintPath>..\..\..\..\..\..\..\FluxSDK\Bin\ChassisCAM.Core.dll</HintPath>
     </Reference>
     <Reference Include="Flux.API">
-      <HintPath>..\..\..\..\..\..\FluxSDK\Bin\Flux.API.dll</HintPath>
+      <HintPath>..\..\..\..\..\..\..\FluxSDK\Bin\Flux.API.dll</HintPath>
     </Reference>
     <Reference Include="Flux.Base">
-      <HintPath>..\..\..\..\..\..\FluxSDK\Bin\Flux.Base.dll</HintPath>
+      <HintPath>..\..\..\..\..\..\..\FluxSDK\Bin\Flux.Base.dll</HintPath>
     </Reference>
   </ItemGroup>
 
