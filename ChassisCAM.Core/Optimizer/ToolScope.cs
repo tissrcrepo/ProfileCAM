@@ -7,7 +7,6 @@ public struct ToolScope<T> where T : Tooling {
    public double EndX { get; set; }
    public int Index { get; set; }
    public bool IsProcessed { get; set; }
-
    public T Tooling { get; set; }
 
    public ToolScope (Tooling Tlg, int idx, List<ToolingSegment> segs = null) {
