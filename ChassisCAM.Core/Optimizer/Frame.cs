@@ -1,8 +1,7 @@
 ﻿using Flux.API;
 using ChassisCAM.Core.Geometries;
-using ChassisCAM.Core.Optimizer;
 
-namespace ChassisCAM.Core.GCodeGen;
+namespace ChassisCAM.Core.Optimizer;
 
 public struct Frame {
    public List<ToolScope<Tooling>> ToolScopes { get; set; } = [];

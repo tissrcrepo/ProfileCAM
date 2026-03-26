@@ -1,5 +1,0 @@
-C:\FluxSDK\Bin\Ijwhost.dll
-C:\FluxSDK\Bin\igesd.deps.json
-C:\FluxSDK\Bin\igesd.runtimeconfig.json
-C:\Users\Parthasarathy.LAP-TK01\Workspaces\TeckInSoft\CCAM\ChassisCAM\ChassisCAM\output\intermediate\IGES\IGES.sourcelink.json
-C:\Users\Parthasarathy.LAP-TK01\Workspaces\TeckInSoft\CCAM\ChassisCAM\ChassisCAM\output\intermediate\IGES\IGES.genruntimeconfig.cache

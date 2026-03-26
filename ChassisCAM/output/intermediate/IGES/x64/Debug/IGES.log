@@ -1,8 +1,0 @@
-﻿C:\Users\Parthasarathy.LAP-TK01\Workspaces\TeckInSoft\CCAM\ChassisCAM\ChassisCAM\packages\CommunityToolkit.Mvvm.8.4.0\build\CommunityToolkit.Mvvm.SourceGenerators.targets(144,5): warning MVVMTKCFG0002: The MVVM Toolkit source generators might not be loaded correctly, as the current project is using the packages.config setup to restore NuGet packages. Source generators require PackageReference to be used (either in a legacy-style or SDK-style .csproj project, both are supported as long as PackageReference is used).
-  pch.cpp
-  IGES.CLI.cpp
-  IGESNative.cpp
-  .NETCoreApp,Version=v8.0.AssemblyAttributes.cpp
-  Generating Code...
-     Creating library C:\FluxSDK\Bin\igesd.lib and object C:\FluxSDK\Bin\igesd.exp
-  IGES.vcxproj -> C:\FluxSDK\Bin\igesd.dll

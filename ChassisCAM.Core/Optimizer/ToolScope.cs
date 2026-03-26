@@ -46,5 +46,5 @@ public struct ToolScope<T> where T : Tooling {
       }
    }
 
-   public double Length => Math.Abs (StartX - EndX);
+   public readonly double Length => Math.Abs (StartX - EndX);
 }

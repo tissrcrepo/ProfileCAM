@@ -7,7 +7,13 @@
 *.user
 Sample/Head1/
 Sample/Head2/
-/output
+
 /FChassis-Installer/Thumbs.db
 /FChassis_Setup.exe
-/ChassisCAM/output
+
+# Ignore all output folders and their contents
+**/output/
+output/
+**/output/*
+*/output/
+/output
