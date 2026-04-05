@@ -6,6 +6,9 @@ using ChassisCAM.Core.Geometries;
 using System.Text.Json;
 using static ChassisCAM.Core.Geometries.Geom;
 using static ChassisCAM.Core.MCSettings;
+using ChassisCAM.Core.Optimizer;
+using System.Diagnostics;
+using ChassisCAM.Core;
 
 namespace ChassisCAM.Core;
 
@@ -96,12 +99,12 @@ internal static class Extensions {
    }
    public static Vector3 ToVector (this Point3 val) => new (val.X, val.Y, val.Z);
    public static Vector3 ToPV (this Point3 val) => new (val.X, val.Y, val.Z);
-   public static double LengthSquared (this Vector3 v) => v.X*v.X+ v.Y*v.Y+ v.Z*v.Z;
+   public static double LengthSquared (this Vector3 v) => v.X * v.X + v.Y * v.Y + v.Z * v.Z;
    public static Point2 Subtract (this Point2 val, Point2 sub) {
       Point2 pt = new (val.X - sub.X, val.Y - sub.Y);
       return pt;
    }
-   public static Vector3 Cross(this Vector3 a, Vector3 b) => Geom.Cross (a, b);
+   public static Vector3 Cross (this Vector3 a, Vector3 b) => Geom.Cross (a, b);
 
    public static string GetGCodeComment (this Point3 val, string token) {
       var s = $"{token} {{ {val.X.Round (3)}, {val.Y.Round (3)}, {val.Z.Round (3)} }}";
@@ -289,7 +292,7 @@ public static class Utils {
    public enum EArcSense {
       CW, CCW, Infer, Unknown
    }
-    public enum ArcType {
+   public enum ArcType {
       Major,
       Minor,
       Semicircular
@@ -1129,7 +1132,7 @@ public static class Utils {
          }
 
          // Compute the scrap side direction
-           (firstToolingEntryPt, materialRemovalDirection) = Utils.GetMaterialRemovalSideDirection (toolingSegmentsList);
+         (firstToolingEntryPt, materialRemovalDirection) = Utils.GetMaterialRemovalSideDirection (toolingSegmentsList);
 
          // Compute the tooling direction.
          Vector3 toolingDir;
@@ -2397,7 +2400,8 @@ public static class Utils {
    /// <param name="testing">Boolean flag if G Code is run for testing sanity</param>
    /// <returns>Returns the List of G Codes, for Head 1 and Head 2, generated for each cut scope. 
    /// For a single pass legacy, the wrapper list holds only one Cut Scope's G Codes for Head 1 and Head 2</returns>
-   public static List<List<GCodeSeg>> ComputeGCode (GCodeGenerator gcodeGen, bool testing = false) {
+#nullable enable
+   public static List<List<GCodeSeg>> ComputeGCode (GCodeGenerator gcodeGen, bool testing = false, double tol = 1e-6) {
       List<List<GCodeSeg>> traces = [[], []];
 
       // Check if the workpiece needs a multipass cutting
@@ -2413,6 +2417,82 @@ public static class Utils {
          gcodeGen.ResetBookKeepers ();
       }
       if (gcodeGen.EnableMultipassCut && MultiPassCuts.IsMultipassCutTask (gcodeGen.Process.Workpiece.Model)) {
+#if false
+         double MinFL = 800;
+         double MaxFL = gcodeGen.MaxFrameLength;
+         
+         // Get all part multi frams.
+         PartMultiFrames partMultiFrames = new (gcodeGen, MinFL, tol);
+
+         //// My test code
+         ////double startIterX = partMultiFrames.ToolScopesBySxList[0].StartX;
+         ////var tssListEx = PartMultiFrames.GetToolScopesWithin (partMultiFrames.ToolScopesByExList, startIterX, startIterX + MaxFL, tol: tol);
+         ////int sIndex = tssListEx[0].IndexSx;
+         ////int endIndex = tssListEx[^1].IndexEx;
+
+         //var totalTSS = gcodeGen.Process.Workpiece.Cuts.Count;
+         //int k = 0;
+         //int sIndex = partMultiFrames.FrameHeaders[k].Item1;
+         //int endIndex = partMultiFrames.FrameHeaders[k].Item2;
+         //++k;
+         //double startIterX = partMultiFrames.ToolScopesBySxList[sIndex].StartX;
+         //double endIterX = partMultiFrames.ToolScopesByExList[endIndex].EndX;
+
+         //int nTSS = 0;
+         //while (true) { // Frame loop gets the best of the frame probableFrames
+         //   var tssListEx = PartMultiFrames.GetToolScopesWithin (partMultiFrames.ToolScopesByExList, startIterX, endIterX, tol: tol);
+         //   List<ProbableOptimalFrame> optimalFrames = [];
+            
+         //   //var frame = new Frame (tssListEx, MinFra, MaxFL, sIndex, endIndex, tol);
+         //   //frame.GetOptimumSubFrame ();
+         //   //nTSS += partMultiFrames.GetToolScopesWithin (sIndex, endIndex).Count;
+            
+         //   //if (!partMultiFrames.CandidateFrames.ContainsKey ((sIndex, endIndex)))
+         //   //   throw new Exception ($"Key ( {sIndex},{endIndex} ) not found in candidateFrames");
+
+
+         //   // Set IsProcessed to true
+         //   for (int ii = sIndex; ii < endIndex; ii++)
+         //      tssListEx[ii].IsProcessed = true;
+
+         //   if (k >= partMultiFrames.FrameHeaders.Count)
+         //      break;
+
+         //   sIndex = partMultiFrames.FrameHeaders[k].Item1;
+         //   endIndex = partMultiFrames.FrameHeaders[k].Item2;
+         //   k++;
+         //   startIterX = partMultiFrames.ToolScopesBySxList[sIndex].StartX;
+         //   endIterX = partMultiFrames.ToolScopesByExList[endIndex].EndX;
+            
+            
+         //   //var firstUnprocessedNodeAmdIndex = PartMultiFrames.GetFirstUnprocessedNode (partMultiFrames.ToolScopesBySxList);
+         //   //if (firstUnprocessedNodeAmdIndex == null)
+         //   //   break;
+         //   //sIndex = firstUnprocessedNodeAmdIndex.Value.Index;
+         //   //endIndex = 
+         //   //PartMultiFrames.FindToolScopesIxnEx (partMultiFrames.ToolScopesByEx);
+         //   //LinkedListNode<ToolScope<Tooling>>? refEndXToolScopeNode = null;
+
+         //   //ProbableOptimalFrame? bestToolScopesPerFrame = null;
+
+
+         //   //sIndex = firstUnprocessedNode.Value.Index;
+
+         //   // No more unprocessed nodes
+         //   //if (firstUnprocessedNode == null)
+         //   //   return traces;
+
+         //   //while (true) { // Optimizer for the frame loop
+         //   //}
+            
+         //}
+         //if (partMultiFrames.ToolScopesByExList.Count != nTSS)
+         //   throw new Exception ("nTSS processed tss count not eqial to count in the list");
+         return traces;
+#else
+
+
+         // -----------------------------------------------------------------------------------------
 
          MultiPassCuts mpc = new (gcodeGen);
 
@@ -2438,6 +2518,8 @@ public static class Utils {
          gcodeGen.EnableMultipassCut = prevVal;
       }
       return traces;
+#endif
+
    }
 
    /// <summary>
@@ -2464,7 +2546,7 @@ public static class Utils {
    /// <param name="filePath">Json file path</param>
    /// <param name="obj">Object to write</param>
    /// <returns>A boolean representing the write operation status</returns>
-   public static bool WriteJsonFile<T> (string filePath, T obj, JsonSerializerOptions options = default) {
+   public static bool WriteJsonFile<T> (string filePath, T obj, JsonSerializerOptions? options = default) {
       try {
          var json = JsonSerializer.Serialize (obj, options);
          File.WriteAllText (filePath, json);
@@ -2672,18 +2754,18 @@ public static class Utils {
       if (segs == null) throw new ArgumentException ("argument List<ToolingSegment> segs is null,", nameof (segs));
       double cumLen = 0;
       for (int ii = 0; ii < segs.Count; ii++) {
-         if (ii == 0 ) {
+         if (ii == 0) {
             Arc3 arc = segs[0].Curve as Arc3;
             // In lead ins, the length of the arc is 2*Pi*r/4 / specified in LeadInApproachArcAngle degrees (90 def)
             var (_, rad) = EvaluateCenterAndRadius (arc);
             //cumLen += Math.PI * rad / 2;
             cumLen += MCSettings.It.LeadInApproachArcAngle.ToRadians () * rad;
-         }else
+         } else
             cumLen += segs[ii].Curve.Length;
       }
       return cumLen;
    }
-   
+
    public static double GetToolingLength (List<ToolingSegment> segs, int startIndex = -1, int endIndex = -1, bool leadIn = false) {
       if (segs == null) throw new ArgumentException ("argument List<ToolingSegment> segs is null,", nameof (segs));
       if (startIndex == -1 && endIndex == -1) {
@@ -2694,9 +2776,9 @@ public static class Utils {
       double cumLen = 0;
       for (int ii = startIndex; ii <= endIndex; ii++) {
          if (ii == 0 && leadIn) {
-               Arc3 arc = segs[0].Curve as Arc3;
-               // In lead ins, the length of the arc is 2*Pi*r/4 = Pi*r/2;
-               var (_, rad) = EvaluateCenterAndRadius (arc);
+            Arc3 arc = segs[0].Curve as Arc3;
+            // In lead ins, the length of the arc is 2*Pi*r/4 = Pi*r/2;
+            var (_, rad) = EvaluateCenterAndRadius (arc);
             //cumLen += Math.PI * rad / 2;
             cumLen += MCSettings.It.LeadInApproachArcAngle.ToRadians () * rad;
 
@@ -2847,5 +2929,36 @@ public static class Utils {
       res = [.. holes, .. cutouts, .. singlePlaneNotches, .. dualPlaneNotches];
 
       return res;
+   }
+
+   public static bool IsHoleFeature (Tooling toolingItem, Bound3 workpieceBound, double minCutoutLengthThreshold) {
+      bool toTreatAsCutOut = CutOut.ToTreatAsCutOut (toolingItem.Segs, workpieceBound, minCutoutLengthThreshold);
+      if ((toolingItem.IsHole () && !toTreatAsCutOut) || toolingItem.IsMark ())
+         return true;
+      return false;
+   }
+
+   public static (double MinStartX, double MaxEndX)? GetBounds (
+       List<ToolScope<Tooling>> toolScopes) {
+      if (toolScopes is null)
+         throw new ArgumentNullException (nameof (toolScopes));
+
+      if (toolScopes.Count == 0)
+         return null;
+
+      double minStartX = double.MaxValue;
+      double maxEndX = double.MinValue;
+
+      for (int ii = 0; ii < toolScopes.Count; ii++) {
+         var ts = toolScopes[ii];
+
+         if (ts.StartX < minStartX)
+            minStartX = ts.StartX;
+
+         if (ts.EndX > maxEndX)
+            maxEndX = ts.EndX;
+      }
+
+      return (minStartX, maxEndX);
    }
 }

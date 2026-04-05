@@ -32,4 +32,14 @@
       public InfeasibleCutoutException (string message, Exception innerException)
           : base (message, innerException) { }
    }
+
+   public class FrameNotProcessableException : Exception {
+      public FrameNotProcessableException () { }
+
+      public FrameNotProcessableException (string message)
+          : base (message) { }
+
+      public FrameNotProcessableException (string message, Exception innerException)
+          : base (message, innerException) { }
+   }
 }

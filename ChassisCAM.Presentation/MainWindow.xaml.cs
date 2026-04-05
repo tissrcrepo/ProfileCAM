@@ -1330,7 +1330,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged {
    }
 
 
-   string GetInstallLocationFromRegistry () {
+   string? GetInstallLocationFromRegistry () {
       try {
          string[] registryPathsToCheck =
          {
@@ -1340,11 +1340,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged {
         };
 
          foreach (string registryPath in registryPathsToCheck) {
-            using (RegistryKey key = Registry.LocalMachine.OpenSubKey (registryPath)) {
+            using (RegistryKey? key = Registry.LocalMachine.OpenSubKey (registryPath)) {
                if (key != null) {
-                  object installLocation = key.GetValue ("InstallLocation");
+                  object? installLocation = key.GetValue ("InstallLocation");
                   if (installLocation != null && !string.IsNullOrEmpty (installLocation.ToString ())) {
-                     string path = installLocation.ToString ();
+                     string? path = installLocation.ToString ();
 
                      // Validate that the path exists and is accessible
                      if (Directory.Exists (path)) {
@@ -1374,9 +1374,19 @@ public partial class MainWindow : Window, INotifyPropertyChanged {
          //}
 
          // Option 2: Fallback to standard .NET assembly loading if AssemblyLoader doesn't load explicitly
-         string assemblyPath = Path.Combine (
-             Path.GetDirectoryName (Assembly.GetExecutingAssembly ().Location),
-             "Flux.Base.dll");
+
+         //string assemblyPath = Path.Combine (
+         //    Path.GetDirectoryName (Assembly.GetExecutingAssembly ().Location),
+         //    "Flux.Base.dll");
+
+         var dir = Path.GetDirectoryName (Assembly.GetExecutingAssembly ().Location);
+
+         if (dir == null) {
+            System.Diagnostics.Debug.WriteLine ("Assembly directory is null");
+            return false;
+         }
+
+         string assemblyPath = Path.Combine (dir, "Flux.Base.dll");
 
          if (!File.Exists (assemblyPath)) {
             System.Diagnostics.Debug.WriteLine ($"Flux.Base.dll not found at: {assemblyPath}");

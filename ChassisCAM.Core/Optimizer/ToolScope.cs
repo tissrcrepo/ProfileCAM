@@ -2,12 +2,16 @@
 using ChassisCAM.Core.Geometries;
 
 namespace ChassisCAM.Core.Optimizer;
-public struct ToolScope<T> where T : Tooling {
+public class ToolScope<T> where T : Tooling {
    public double StartX { get; set; }
    public double EndX { get; set; }
    public int Index { get; set; }
-   public bool IsProcessed { get; set; }
+   public int IndexSx { get; set; }
+   public int IndexEx { get; set; }
+   public bool IsProcessed { get; set; } = false;
+   public bool IsProcessCompleted { get; set; } = false;
    public T Tooling { get; set; }
+   public List<ToolScope<T>> ToolScopeIxnsbyEndX { get; set; } = [];
 
    public ToolScope (Tooling Tlg, int idx, List<ToolingSegment> segs = null) {
       Tooling = (T)Tlg;
@@ -30,14 +34,12 @@ public struct ToolScope<T> where T : Tooling {
             var pt1X = cen.X - rad; var pt2X = cen.X + rad;
             var pt1 = new Point3 (pt1X, cen.Y, cen.Z);
             var pt2 = new Point3 (pt2X, cen.Y, cen.Z);
+
             if (Geom.IsPointOnCurve (seg.Curve, pt1, seg.Vec0)) {
                if (StartX > pt1.X)
                   StartX = pt1.X;
-               if (EndX < pt1.X)
-                  EndX = pt1.X;
-            }else if ( Geom.IsPointOnCurve(seg.Curve, pt2, seg.Vec0)) {
-               if (StartX > pt2.X)
-                  StartX = pt2.X;
+            }
+            if (Geom.IsPointOnCurve (seg.Curve, pt2, seg.Vec0)) {
                if (EndX < pt2.X)
                   EndX = pt2.X;
             }
@@ -45,5 +47,25 @@ public struct ToolScope<T> where T : Tooling {
       }
    }
 
-   public readonly double Length => Math.Abs (StartX - EndX);
+   public ToolScope<T> Clone () {
+      var clone = new ToolScope<T> (this.Tooling, this.Index) {
+         StartX = this.StartX,
+         EndX = this.EndX,
+         IsProcessed = this.IsProcessed,
+         IsProcessCompleted = this.IsProcessCompleted,
+         ToolScopeIxnsbyEndX = this.ToolScopeIxnsbyEndX != null
+        ? new List<ToolScope<T>> (this.ToolScopeIxnsbyEndX.Count)
+        : []
+      };
+
+      if (this.ToolScopeIxnsbyEndX != null) {
+         foreach (var ts in this.ToolScopeIxnsbyEndX) {
+            clone.ToolScopeIxnsbyEndX.Add (ts.Clone ());
+         }
+      }
+
+      return clone;
+   }
+
+   public double Length => Math.Abs (StartX - EndX);
 }

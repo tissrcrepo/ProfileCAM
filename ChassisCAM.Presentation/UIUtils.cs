@@ -66,7 +66,7 @@ public class PathUtils {
       }
 
       // Step 5: Check if the path exists
-      if (!Directory.Exists (ConvertToWindowsPath(linuxPath)) && !isFile) {
+      if (!Directory.Exists (ConvertToWindowsPath (linuxPath)) && !isFile) {
          throw new DirectoryNotFoundException ($"The directory does not exist: {ConvertToWindowsPath (linuxPath)}");
       }
 
@@ -84,14 +84,14 @@ public partial class FolderPicker {
 
    public IReadOnlyList<string> ResultPaths => mResultPaths;
    public IReadOnlyList<string> ResultNames => mResultNames;
-   public string ResultPath => ResultPaths.FirstOrDefault ();
-   public string ResultName => ResultNames.FirstOrDefault ();
-   public virtual string InputPath { get; set; }
+   public string? ResultPath => ResultPaths.FirstOrDefault ();
+   public string? ResultName => ResultNames.FirstOrDefault ();
+   public virtual string? InputPath { get; set; }
    public virtual bool ForceFileSystem { get; set; }
    public virtual bool Multiselect { get; set; }
-   public virtual string Title { get; set; }
-   public virtual string OkButtonLabel { get; set; }
-   public virtual string FileNameLabel { get; set; }
+   public virtual string? Title { get; set; }
+   public virtual string? OkButtonLabel { get; set; }
+   public virtual string? FileNameLabel { get; set; }
 
    protected virtual int SetOptions (int options) {
       if (ForceFileSystem) {
@@ -105,7 +105,7 @@ public partial class FolderPicker {
    }
 
    // for WPF support
-   public bool? ShowDialog (Window owner = null, bool throwOnError = false) {
+   public bool? ShowDialog (Window? owner = null, bool throwOnError = false) {
       owner = owner ?? Application.Current?.MainWindow;
       return ShowDialog (owner != null ? new WindowInteropHelper (owner).Handle : IntPtr.Zero, throwOnError);
    }

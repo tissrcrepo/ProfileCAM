@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Security.Cryptography;
 using ChassisCAM.Core.GCodeGen;
 using ChassisCAM.Core.Geometries;
 using Flux.API;
@@ -129,6 +130,8 @@ public class Tooling {
    public ECutKind ProfileKind = ECutKind.None;
    double mPerimeter = -1.0;
    List<ToolingSegment> mSegs = [];
+   List<ToolingSegment> mCorrectedSegs = [];
+   List<ToolingSegment> mModifiedSegs = [];
 
    public bool EdgeNotch { get; set; } = false;
    public List<ToolingSegment> Segs {
@@ -139,6 +142,28 @@ public class Tooling {
       }
 
       set { mSegs = value; }
+   }
+
+   public List<ToolingSegment> CorrectedSegs {
+      get {
+         if (mCorrectedSegs.Count == 0) return Segs;
+         return mCorrectedSegs;
+      }
+      set {
+         mCorrectedSegs = value;
+      }
+   }
+   public List<ToolingSegment> ModifiedSegs {
+      get {
+         if (mModifiedSegs.Count == 0) {
+            if (mCorrectedSegs.Count == 0) return Segs;
+            else return mCorrectedSegs;
+         }
+         return mModifiedSegs;
+      }
+      set {
+         mModifiedSegs = value;
+      }
    }
    public Tooling RefTooling { get; set; } = null;
    Bound3? mBound3 = null;
