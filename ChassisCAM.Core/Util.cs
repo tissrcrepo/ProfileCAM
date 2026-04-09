@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using static System.Math;
 using Flux.API;
 using ChassisCAM.Core.GCodeGen;
@@ -89,6 +89,10 @@ internal static class Extensions {
    public static bool EQ (this double a, double b, double err) => Abs (a - b) < err;
    public static bool EQ (this float a, float b) => Abs (a - b) < 1e-6;
    public static bool EQ (this float a, float b, double err) => Abs (a - b) < err;
+   public static bool EQ (this Vector3 a, Vector3 b, double err) {
+      if (a.X.EQ (b.X, err) && a.Y.EQ (b.Y, err) && a.Z.EQ (b.Z, err)) return true;
+      return false;
+   }
    public static double D2R (this int a) => a * PI / 180;
    public static bool LieWithin (this double val, double leftLimit,
                                  double rightLimit, double epsilon = 1e-6)
@@ -122,6 +126,128 @@ internal static class Extensions {
    public static bool IsTopOrBottomFlange (this Vector3 normal, double tol = 1e-6) =>
       normal.Normalized ().EQ (XForm4.mYAxis, tol) || normal.Normalized ().EQ (XForm4.mNegYAxis, tol);
 }
+
+#nullable enable
+public static class CloningExtensions {
+   public static Arc3? Clone (this Arc3 arc) {
+      bool exists = Arc3Factory.TryGetPoints (arc, out var s, out var ip1, out var ip2, out var e);
+      if ( exists )
+         return new Arc3 (s, ip1, ip2, e);
+      throw new Exception ("Arc is not cached");
+   }
+
+   public static Line3? Clone (this Line3 line) {
+      // For Line3 (assuming no cache), just create new
+      return new Line3 (line.Start, line.End);
+   }
+
+   public static Curve3? Clone (this Curve3 curve) {
+      if (curve is Arc3 arc)
+         return arc.Clone ();  // Uses cached Arc3 clone
+      else if (curve is Line3 line)
+         return line.Clone ();  // Creates new Line3
+      else
+         return null;
+   }
+}
+
+public static class GeomExtensions {
+   public static bool IsCircle (this Arc3 arc, double tol = 1e-6) {
+      if (arc.Start.DistTo (arc.End).LTEQ (tol)) return true;
+      return false;
+   }
+   public static Point3 Center (this Arc3 arc) {
+      var (cen, _) = Geom.EvaluateCenterAndRadius (arc);
+      return cen;
+   }
+   public static double Radius (this Arc3 arc) {
+      var (_, rad) = Geom.EvaluateCenterAndRadius (arc);
+      return rad;
+   }
+   public static Point3 EvaluatePointAtParam (
+    this Curve3 crv,
+    double param,
+    Vector3? apn = null,
+    double tol = 1e-6) {
+      if (crv is Arc3 arc)
+         return arc.EvaluatePointAtParam (param, apn, tol);
+      else if (crv is Line3 line)
+         return line.EvaluatePointAtParam (param, apn: null, tol);
+      else
+         throw new NotImplementedException ("Entity is not implemented");
+   }
+
+   public static Point3 EvaluatePointAtParam (
+    this Arc3 arc,
+    double param,
+    Vector3 apn,
+    double tol = 1e-6) {
+      // ---- Normalize axis -------------------------------------------------
+      apn = apn.Normalized ();
+
+      var center = arc.Center ();
+      var start = arc.Start;
+      double radius = arc.Radius ();
+
+      // ---- Optional safety: ensure axis ⟂ radius --------------------------
+      var rvec = (start - center).Normalized ();
+      if (!rvec.Dot (apn).EQ (0, tol))
+         throw new Exception ("Axis is not perpendicular to arc plane");
+
+      double theta;
+
+      // ---- Circle case -----------------------------------------------------
+      if (arc.IsCircle (tol)) {
+         // Allow any param (negative, >1, multi-turn)
+         double s = param * arc.Length;
+
+         theta = s / radius;
+
+         // Normalize angle to avoid overflow (optional)
+         theta %= 2 * Math.PI;
+      } else {
+         // Arc case: strictly bounded
+         if (!param.LieWithin (0, 1))
+            throw new Exception ("For arc, param must be between 0 and 1");
+
+         double s = param * arc.Length;
+         theta = s / radius;
+      }
+
+      // ---- Rotate start point about axis ----------------------------------
+      return XForm4.AxisRotation (apn, center, start, theta);
+   }
+
+   public static Point3 EvaluatePointAtParam (
+    this Line3 line,
+    double param,
+    Vector3? apn = null,
+    bool constrainedWithInLine = true,
+    double tol = 1e-6) {
+      var start = line.Start;
+      var end = line.End;
+
+      // ---- Direction vector ----------------------------------------------
+      var dir = end - start;
+
+      // ---- Degenerate case: zero-length line ------------------------------
+      if (dir.Length.EQ (0, tol))
+         return start;
+
+      // ---- Parameter handling --------------------------------------------
+      double t = param;
+
+      if (constrainedWithInLine) {
+         if (!t.LieWithin (0, 1))
+            throw new Exception ("Parameter must be between 0 and 1 for a line segment");
+      }
+
+      // ---- Linear interpolation ------------------------------------------
+      return start + dir * t;
+   }
+}
+
+
 
 public enum MachiningSense {
    Downward,
@@ -158,6 +284,11 @@ public enum EMove {
    None
 }
 
+public enum FrameMachinableStatus {
+   Empty,
+   Machinable,
+   Impossible
+}
 /// <summary>
 /// Represents the drawable information of a G-Code segment, 
 /// which is used for simulation purposes.
@@ -2420,75 +2551,11 @@ public static class Utils {
 #if false
          double MinFL = 800;
          double MaxFL = gcodeGen.MaxFrameLength;
-         
+
          // Get all part multi frams.
          PartMultiFrames partMultiFrames = new (gcodeGen, MinFL, tol);
-
-         //// My test code
-         ////double startIterX = partMultiFrames.ToolScopesBySxList[0].StartX;
-         ////var tssListEx = PartMultiFrames.GetToolScopesWithin (partMultiFrames.ToolScopesByExList, startIterX, startIterX + MaxFL, tol: tol);
-         ////int sIndex = tssListEx[0].IndexSx;
-         ////int endIndex = tssListEx[^1].IndexEx;
-
-         //var totalTSS = gcodeGen.Process.Workpiece.Cuts.Count;
-         //int k = 0;
-         //int sIndex = partMultiFrames.FrameHeaders[k].Item1;
-         //int endIndex = partMultiFrames.FrameHeaders[k].Item2;
-         //++k;
-         //double startIterX = partMultiFrames.ToolScopesBySxList[sIndex].StartX;
-         //double endIterX = partMultiFrames.ToolScopesByExList[endIndex].EndX;
-
-         //int nTSS = 0;
-         //while (true) { // Frame loop gets the best of the frame probableFrames
-         //   var tssListEx = PartMultiFrames.GetToolScopesWithin (partMultiFrames.ToolScopesByExList, startIterX, endIterX, tol: tol);
-         //   List<ProbableOptimalFrame> optimalFrames = [];
-            
-         //   //var frame = new Frame (tssListEx, MinFra, MaxFL, sIndex, endIndex, tol);
-         //   //frame.GetOptimumSubFrame ();
-         //   //nTSS += partMultiFrames.GetToolScopesWithin (sIndex, endIndex).Count;
-            
-         //   //if (!partMultiFrames.CandidateFrames.ContainsKey ((sIndex, endIndex)))
-         //   //   throw new Exception ($"Key ( {sIndex},{endIndex} ) not found in candidateFrames");
-
-
-         //   // Set IsProcessed to true
-         //   for (int ii = sIndex; ii < endIndex; ii++)
-         //      tssListEx[ii].IsProcessed = true;
-
-         //   if (k >= partMultiFrames.FrameHeaders.Count)
-         //      break;
-
-         //   sIndex = partMultiFrames.FrameHeaders[k].Item1;
-         //   endIndex = partMultiFrames.FrameHeaders[k].Item2;
-         //   k++;
-         //   startIterX = partMultiFrames.ToolScopesBySxList[sIndex].StartX;
-         //   endIterX = partMultiFrames.ToolScopesByExList[endIndex].EndX;
-            
-            
-         //   //var firstUnprocessedNodeAmdIndex = PartMultiFrames.GetFirstUnprocessedNode (partMultiFrames.ToolScopesBySxList);
-         //   //if (firstUnprocessedNodeAmdIndex == null)
-         //   //   break;
-         //   //sIndex = firstUnprocessedNodeAmdIndex.Value.Index;
-         //   //endIndex = 
-         //   //PartMultiFrames.FindToolScopesIxnEx (partMultiFrames.ToolScopesByEx);
-         //   //LinkedListNode<ToolScope<Tooling>>? refEndXToolScopeNode = null;
-
-         //   //ProbableOptimalFrame? bestToolScopesPerFrame = null;
-
-
-         //   //sIndex = firstUnprocessedNode.Value.Index;
-
-         //   // No more unprocessed nodes
-         //   //if (firstUnprocessedNode == null)
-         //   //   return traces;
-
-         //   //while (true) { // Optimizer for the frame loop
-         //   //}
-            
-         //}
-         //if (partMultiFrames.ToolScopesByExList.Count != nTSS)
-         //   throw new Exception ("nTSS processed tss count not eqial to count in the list");
-         return traces;
+      }
+      return traces;
 #else
 
 
@@ -2931,6 +2998,43 @@ public static class Utils {
       return res;
    }
 
+   public static List<Tooling> GetToolings4Head (List<ToolScope<Tooling>> tss, int headNo, MCSettings mcs) {
+      // New priorities are set as per task FCH-35
+      List<Tooling> res, holes = [];
+      List<Tooling> cuts = new (tss.Count); // Pre-allocate exact capacity
+
+      for (int ii = 0; ii < tss.Count; ii++)
+         cuts.Add (tss[ii].Tooling);
+
+      holes = [.. cuts.Where (cut => cut.Head == headNo && cut.Kind == EKind.Hole)];
+
+      // Set priority by flange on which the features are present in flangeCutPriority
+      holes = [..holes.OrderBy (cut => Array.IndexOf (sFlangeCutPriority, Utils.GetFlangeType (cut,mcs.PartConfig==PartConfigType.LHComponent?sXformLHInv:sXformRHInv)))
+      //.ThenBy (cut => MCSettings.It.ToolingPriority.ToList().IndexOf (cut.Kind))
+      .ThenBy (cut => cut.Start.Pt.X)];
+
+      // Collect CutOuts, then order by by flange priority ( flangeCutPriority ),  then by ascending order of X
+      var cutouts = (cuts.Where (cut => cut.Kind == EKind.Cutout && cut.Head == headNo));
+      cutouts = [..cutouts.OrderBy (cut => Array.IndexOf (sFlangeCutPriority, Utils.GetFlangeType (cut,mcs.PartConfig==PartConfigType.LHComponent?sXformLHInv:sXformRHInv)))
+      //.ThenBy (cut => MCSettings.It.ToolingPriority.ToList().IndexOf (cut.Kind))
+      .ThenBy (cut => cut.Start.Pt.X)];
+
+      // Collect single plane notches, then order by flange priority ( flangeCutPriority ),  then by ascending order of X
+      var singlePlaneNotches = cuts.Where (cut => cut.Kind == EKind.Notch && cut.Head == headNo && cut.IsSingleFlangeTooling ());
+      singlePlaneNotches = [..singlePlaneNotches.OrderBy (cut => Array.IndexOf (sFlangeCutPriority, Utils.GetFlangeType (cut,mcs.PartConfig==PartConfigType.LHComponent?sXformLHInv:sXformRHInv)))
+      .ThenBy (cut => cut.Start.Pt.X)];
+
+      // Collect dual plane notches , then order by flange priority ( flangeCutPriority ),  then by ascending order of X
+      var dualPlaneNotches = cuts.Where (cut => cut.Kind == EKind.Notch && cut.Head == headNo && cut.IsDualFlangeTooling ());
+      dualPlaneNotches = [..dualPlaneNotches.OrderBy (cut => Array.IndexOf (sFlangeCutPriority, Utils.GetFlangeType (cut,mcs.PartConfig==PartConfigType.LHComponent?sXformLHInv:sXformRHInv)))
+      .ThenBy (cut => cut.Start.Pt.X)];
+
+      // Concat all
+      res = [.. holes, .. cutouts, .. singlePlaneNotches, .. dualPlaneNotches];
+
+      return res;
+   }
+
    public static bool IsHoleFeature (Tooling toolingItem, Bound3 workpieceBound, double minCutoutLengthThreshold) {
       bool toTreatAsCutOut = CutOut.ToTreatAsCutOut (toolingItem.Segs, workpieceBound, minCutoutLengthThreshold);
       if ((toolingItem.IsHole () && !toTreatAsCutOut) || toolingItem.IsMark ())
@@ -2960,5 +3064,64 @@ public static class Utils {
       }
 
       return (minStartX, maxEndX);
+   }
+
+   /// <summary>
+   /// Returns the rapid position distance from pointVec of (flange/web) to
+   /// pointVec ( flange/Web)
+   /// </summary>
+   /// <param name="from"></param>
+   /// <param name="to"></param>
+   /// <returns></returns>
+   public static double GetRapidPosDist (PointVec? from, PointVec? to) {
+      if (from is null)
+         throw new ArgumentNullException (nameof (from));
+      if (to is null)
+         throw new ArgumentNullException (nameof (to));
+
+      var fromVec = from.Value.Vec.Normalized (); var toVec = to.Value.Vec.Normalized ();
+      var fromPt = from.Value.Pt; var toPt = to.Value.Pt;
+      if (fromPt.EQ (toPt)) return 0.0;
+      // Same side flange
+      if (fromVec.EQ (toVec))
+         return fromPt.DistTo (toPt);
+
+      else if (!fromVec.EQ (XForm4.mZAxis) && !toVec.EQ (XForm4.mZAxis)) {
+         //top to bottom or bottom to top
+         double zDist = Math.Abs (fromPt.Z) + Math.Abs (toPt.Z);
+         var fromPtAtZ0 = new Point2 (from.Value.Pt.X, fromPt.Y);
+         var toPtAtZ0 = new Point2 (to.Value.Pt.X, to.Value.Pt.Y);
+         var rapidPosDist = zDist + fromPtAtZ0.DistTo (toPtAtZ0);
+         return rapidPosDist;
+      } else if (fromVec.EQ (XForm4.mZAxis) || toVec.EQ (XForm4.mZAxis)) {
+         // Web to flange or flange to web
+         double zDist = Math.Abs (fromPt.Z) + Math.Abs (toPt.Z);
+         var fromPtAtZ0 = new Point2 (from.Value.Pt.X, fromPt.Y);
+         var toPtAtZ0 = new Point2 (to.Value.Pt.X, to.Value.Pt.Y);
+         var rapidPosDist = zDist + fromPtAtZ0.DistTo (toPtAtZ0);
+         return rapidPosDist;
+      }
+      return 0;
+   }
+
+   public static PointVec? GetStartPos (List<ToolScope<Tooling>> tss) {
+      ArgumentNullException.ThrowIfNull (tss);
+      if (tss.Count == 0)
+         return new PointVec ();
+      return new PointVec (tss[0].Tooling.Segs[0].Curve.Start, tss[0].Tooling.Segs[0].Vec0.Normalized ());
+   }
+
+   public static PointVec GetEndPos (List<ToolScope<Tooling>> tss) {
+      ArgumentNullException.ThrowIfNull (tss);
+      if (tss.Count == 0)
+         throw new ArgumentException ("toolscopes tss is empty", nameof (tss));
+      return new PointVec (tss[0].Tooling.Segs[^1].Curve.Start, tss[0].Tooling.Segs[^1].Vec0.Normalized ());
+   }
+
+   public static PointVec GetPosAt (List<ToolScope<Tooling>> tss, int index) {
+      ArgumentNullException.ThrowIfNull (tss);
+      if (tss.Count == 0)
+         throw new ArgumentException ("toolscopes tss is empty", nameof (tss));
+      return new PointVec (tss[index].Tooling.Segs[^1].Curve.Start, tss[index].Tooling.Segs[^1].Vec0.Normalized ());
    }
 }

@@ -20,7 +20,7 @@ public class FCArc3 {
    public Point3 End { get; private set; }
    public double Length { get; private set; }
    public FCArc3 (Point3 s, Point3 i1, Point3 i2, Point3 e) {
-      Arc = new Arc3 (s, i1, i2, e);
+      Arc = new Arc3(s, i1, i2, e);
       (Center, Radius) = Geom.EvaluateCenterAndRadius (Arc);
       Start = s;
       End = e;
@@ -30,5 +30,15 @@ public class FCArc3 {
    }
    public IEnumerable<Point3> Discretize (double error) => Arc.Discretize (error);
    public FCArc3 Clone () => new (Start, mIp1, mIp2, End);
+   // Evaluators
+   public Point3 EvaluatePointAtParam(double param, Vector3? apn, double tol = 1e-6) {
+      return Arc.EvaluatePointAtParam (param, apn, tol);
+   }
+   public double EvaluateParamAtPoint(Point3 pt, double tol = 1e-6) {
+      if (Arc.Start.EQ (pt, tol)) return 0;
+      if (Arc.End.EQ (pt, tol)) return 1.00000;
+      if ( )
+   }
+
 }
 

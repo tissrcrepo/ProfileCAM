@@ -1,15 +1,16 @@
 ﻿using Flux.API;
-using ChassisCAM.Core.Optimizer;
 using ChassisCAM.Core.Geometries;
-using Flux;
 using ChassisCAM.Core.GCodeGen;
 using System.Collections.Generic;
+using static Flux.Sheaf;
+using System.Windows.Input;
 
 namespace ChassisCAM.Core.Optimizer;
 #nullable enable
 public class PartMultiFrames {
    public Workpiece Work { get; }
    public double MaxFrameLength { get; }
+   public GCodeGenerator GCodeGen { get; private set; }
    public double MinFrameLength { get; }
    public LinkedList<ToolScope<Tooling>> ToolScopes { get; } = [];
    public List<ToolScope<Tooling>> ToolScopesList { get; } = [];
@@ -31,6 +32,7 @@ public class PartMultiFrames {
    public int Count { get { return ToolScopes.Count; } }
    public PartMultiFrames (GCodeGenerator gcGen, double minFL, double tol = 1e-6) {
       ArgumentNullException.ThrowIfNull (gcGen);
+      GCodeGen = gcGen;
       Work = gcGen.Process.Workpiece;
       MaxFrameLength = gcGen.MaxFrameLength;
       MinFrameLength = minFL;
@@ -48,41 +50,145 @@ public class PartMultiFrames {
       }
 
 
-      //for (int ii = 0; ii < ToolScopesList.Count; ii++)
-      //   ToolScopesList[ii].Index = ii;
+      for (int ii = 0; ii < ToolScopesList.Count; ii++)
+         ToolScopesList[ii].Index = ii;
 
       // Sort by StartX
       ToolScopesBySxList = [.. ToolScopes.OrderBy (ts => ts.StartX)];
 
-      for (int ii = 0; ii < ToolScopesBySxList.Count; ii++)
-         ToolScopesBySxList[ii].IndexSx = ii;
+      for (int ii = 0; ii < ToolScopesList.Count; ii++)
+         ToolScopesList[ii].IndexSx = ii;
+
+      PopulateDictionaries (ToolScopesBySxList);
 
 
-      //ToolScopesBySx = new (ToolScopesBySxList);
+      double rapidPosSpeed = 100 * 1000; // mm per min
+      double mcSpeed = 2.8 * 1000; // mm per miniute
+      double sOff2EngageTime = 250.0 / 60000.0; // minutes
+      double partFeedSpeed = 20 * 1000; // mm per minute
+      double standOffDist = 20.0;
+      List<List<Frame>> ccFrames = [];
+      double initX = 0;
+      List<int> nHeaders = [];
+      List<Frame> allFrames = [];
+      var keys = CandidateFrames2.Keys.ToList ();
+      List<(int, int)> checkIndicexList = [];
+      List<Frame> machinableFrames = [];
+      Frame? optimalFrame = null;
+      PointVec prevFrameEndPosH1 = new (new Point3 (0, 0, 0), XForm4.mZAxis); ;
+      PointVec prevFrameEndPosH2 = new (new Point3 (MaxFrameLength, 0, 0), XForm4.mZAxis);
+      for (int ii = 0; ii < keys.Count; ii++) {
+         optimalFrame = null;
+         double totalTime = double.MaxValue;
+         int stIndex = keys[ii];
+         var cfList = CandidateFrames2[stIndex] ?? throw new Exception ("CfList is null)");
+         List<Frame> frames = [];
+         int prevStIx = -1, prevEndIx = -1;
+         
+
+         
+         for (int kk = 0; kk < cfList.Count; kk++) {
+            var cfTSSs = cfList[kk].cf.ToolScopesList;
+            var endIndex = cfList[kk].jj;
+            if (prevStIx != -1 && prevEndIx != -1) {
+               if (stIndex == prevStIx && endIndex == prevEndIx)
+                  throw new Exception ($"Duplicate value with start Index {stIndex} and End Index {endIndex}");
+            }
+
+            if (cfTSSs == null) throw new Exception ($"ToolScopeList for candidate frame {ii} through {endIndex} is null");
+            Frame? frame = null;
+
+
+
+            frame = new Frame (
+               GCodeGen,
+                ToolScopesList,
+                cfTSSs,
+                MinFrameLength,
+                MaxFrameLength,
+                stIndex,
+                endIndex,
+                prevFrameEndPosH1,
+                prevFrameEndPosH2,
+                rapidPosSpeed,
+                mcSpeed,
+                sOff2EngageTime,
+                standOffDist);
+            checkIndicexList.Add ((stIndex, endIndex));
+            prevStIx = stIndex; prevEndIx = endIndex;
+            
+
+            if (frame != null) {
+               var mcStatus = frame.Value.MachinableStatus;
+               if (mcStatus == FrameMachinableStatus.Machinable) {
+                  if (totalTime > frame.Value.TotalMachiningTime) {
+                     optimalFrame = frame.Value;
+                     totalTime = frame.Value.TotalMachiningTime;
+                  }
+               }
+               frames.Add (frame.Value);
+               allFrames.Add (frame.Value);
+            }
+         }
+
+
+         if (optimalFrame == null)
+            throw new Exception ($"Could not find the optimal frame for Set {ii}");
+
+         // Get the next start and end indices
+         // Start Index
+         stIndex = optimalFrame.Value.EndIndex + 1;
+
+
+         // End Index
+         // Try get value from sorted dictionary from 
+         //if (CandidateFrames2.TryGetValue (stIndex, out List<(int jj, CandidateFrame cf)> value))
+
+
+
+         prevFrameEndPosH1 = optimalFrame.Value.FinishPositionHead1;
+         prevFrameEndPosH2 = optimalFrame.Value.FinishPositionHead2;
+         machinableFrames.Add (optimalFrame.Value);
+
+
+
+
+         ccFrames.Add (frames);
+         int aa = 0;
+         ++aa;
+      }
+      if (ccFrames.Count != FrameHeaders.Count)
+         throw new Exception ("ccFrames.Count != FrameHeaders.Count, serious error");
+
+      //for ( int ii=0; ii< FrameHeaders.Count; ii++) {
+      //   if (ccFrames[ii].Count != FrameHeaders[ii].Item2 - FrameHeaders[ii].Item1 + 1)
+      //      throw new Exception ("no of frames in a frame from ccFrames and FrameHeaders not equal, serious error ");
+      //}
+   }
+
+   void PopulateDictionaries (List<ToolScope<Tooling>> tss, double tol = 1e-6) {
+
+      
+      //ToolScopesBySx = new (tss);
 
       // Sort by EndX
-      ToolScopesByExList = [.. ToolScopes.OrderBy (ts => ts.EndX)];
+      //tss = [.. tss.OrderBy (ts => ts.StartX)];
 
-      for (int ii = 0; ii < ToolScopesByExList.Count; ii++)
-         ToolScopesByExList[ii].IndexEx = ii;
+      int firstUnprocessedIndex = tss.FindIndex (ts => !ts.IsProcessed);
 
-
-      //ToolScopesByEx = new (ToolScopesByExList);
-
-
-      for (int ii = 0; ii < ToolScopesBySxList.Count; ii++) {
+      for (int ii = firstUnprocessedIndex; ii < tss.Count; ii++) {
          int lastJj = -1;
 
-         double ii_thSx = ToolScopesBySxList[ii].StartX;
-         double ii_thEndX = ToolScopesBySxList[ii].EndX;
+         double ii_thSx = tss[ii].StartX;
+         double ii_thEndX = tss[ii].EndX;
 
-         for (int jj = 0; jj < ToolScopesBySxList.Count; jj++) {
+         for (int jj = firstUnprocessedIndex; jj < tss.Count; jj++) {
             // If the toolscopes pointed to by both ii and jj are the same, continue
-            if (ToolScopesBySxList[ii] == ToolScopesBySxList[jj])
+            if (tss[ii] == tss[jj])
                continue;
 
-            double jj_thSx = ToolScopesBySxList[jj].StartX;
-            double jj_thEndX = ToolScopesBySxList[jj].EndX;
+            double jj_thSx = tss[jj].StartX;
+            double jj_thEndX = tss[jj].EndX;
 
 
 
@@ -103,10 +209,17 @@ public class PartMultiFrames {
             if ((jj_thSx - ii_thSx).SGT (MaxFrameLength))
                break;
 
-            var cf = new CandidateFrame (ToolScopesBySxList, ii, jj, tol);
+            var cf = new CandidateFrame (tss, ii, jj, tol);
 
             CandidateFrames1[(ii, jj)] = cf;
-            CandidateFrames2[ii] = [(jj, cf)];
+            int key = ii; // or whatever your key value is
+
+            if (!CandidateFrames2.TryGetValue (key, out var value)) {
+               value = [];  // Create a new empty list
+               CandidateFrames2[key] = value;  // Add it to the dictionary
+            }
+
+            value.Add ((jj, cf));
 
             lastJj = jj; // track last valid jj for THIS ii
          }
@@ -118,34 +231,18 @@ public class PartMultiFrames {
          for (int kk = 0; kk < FrameHeaders.Count; kk++) {
             int sindex = FrameHeaders[kk].Item1;
             int eIndex = FrameHeaders[kk].Item2;
-            var ex = ToolScopesBySxList[eIndex].EndX;
-            var sx = ToolScopesBySxList[sindex].StartX;
+            var ex = tss[eIndex].EndX;
+            var sx = tss[sindex].StartX;
             if ((ex - sx).SGT (MaxFrameLength))
-               throw new Exception ($"In ToolScopesBySxList, the scope of tool scopes from {sx} to {ex}  = {ex - sx} for indices start {sindex} and end {eIndex} is more than Max Frame Length {MaxFrameLength}");
+               throw new Exception ($"In tss, the scope of tool scopes from {sx} to {ex}  = {ex - sx} for indices start {sindex} and end {eIndex} is more than Max Frame Length {MaxFrameLength}");
          }
       }
+   }
 
-      List<Frame> candFRames = [];
-      foreach (var kvp in CandidateFrames2) {
-         int ii = kvp.Key;
-         var cfList = kvp.Value;
-
-         for (int jj = 0; jj < cfList.Count; jj++) {
-            var val = cfList[jj];
-
-            var frame = new Frame (
-                ToolScopesList,
-                val.cf.ToolScopesList,
-                MinFrameLength,
-                MaxFrameLength,
-                ii,
-                val.jj);
-            candFRames.Add (frame);
-
-            int aa = 0;
-            ++aa;
-         }
-      }
+   void CheckConsistencyOfFrames(List<ToolScope<Tooling>> tss) {
+      int processedCount = ToolScopesBySxList.Count (ts => ts.IsProcessed);
+      if (tss.Count != processedCount)
+         throw new Exception ("No of processed tool scopes in ToolScopesBySxList is not equal to given tool scopes");
    }
 
    public static (LinkedListNode<ToolScope<Tooling>> ToolScopes, int Index)? GetFirstUnprocessedNode (
@@ -310,13 +407,15 @@ public class PartMultiFrames {
    public static List<ToolScope<Tooling>> GetToolScopesIxnAt (
     List<ToolScope<Tooling>> toolScopes,
     double xVal,
+    bool excludeProcessed = false,
     int startIndex = 0,
     double tol = 1e-6) {
       var res = new List<ToolScope<Tooling>> ();
 
       for (int ii = startIndex; ii < toolScopes.Count; ii++) {
          var ts = toolScopes[ii];
-
+         if (ts.IsProcessed && excludeProcessed == true)
+            continue;
          // Early exit if sorted by StartX
          if (ts.StartX.SGT (xVal, tol))
             break;
@@ -348,13 +447,15 @@ public class PartMultiFrames {
     List<ToolScope<Tooling>> toolScopes,
     double startX,
     double endX,
+    bool excludeProcessed = false,
     int startIndex = 0,
     double tol = 1e-6) {
       var res = new List<ToolScope<Tooling>> ();
 
       for (int ii = startIndex; ii < toolScopes.Count; ii++) {
          var ts = toolScopes[ii];
-
+         if (ts.IsProcessed && excludeProcessed == true)
+            continue;
          // Terminal condition
          if (startX.LTEQ (ts.StartX, tol) && ts.EndX.LTEQ (endX, tol)) {
             res.Add (ts);

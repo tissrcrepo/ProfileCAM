@@ -42,4 +42,14 @@
       public FrameNotProcessableException (string message, Exception innerException)
           : base (message, innerException) { }
    }
+
+   public class FrameEmptyException : Exception {
+      public FrameEmptyException () { }
+
+      public FrameEmptyException (string message)
+          : base (message) { }
+
+      public FrameEmptyException (string message, Exception innerException)
+          : base (message, innerException) { }
+   }
 }

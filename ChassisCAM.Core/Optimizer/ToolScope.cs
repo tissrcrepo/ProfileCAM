@@ -12,6 +12,8 @@ public class ToolScope<T> where T : Tooling {
    public bool IsProcessCompleted { get; set; } = false;
    public T Tooling { get; set; }
    public List<ToolScope<T>> ToolScopeIxnsbyEndX { get; set; } = [];
+   public PointVec StartPos () => new (this.Tooling.Segs[0].Curve.Start, this.Tooling.Segs[0].Vec0.Normalized ());
+   public PointVec EndPos () => new  (this.Tooling.Segs[0].Curve.End, this.Tooling.Segs[0].Vec1.Normalized ());
 
    public ToolScope (Tooling Tlg, int idx, List<ToolingSegment> segs = null) {
       Tooling = (T)Tlg;

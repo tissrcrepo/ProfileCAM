@@ -430,6 +430,7 @@ namespace ChassisCAM.Core.GCodeGen {
          }
          sw.WriteLine (gcodeSt);
       }
+      public MCSettings GCodeGenSettings { get; set; }
       /// <summary>Resets the GCodeGenerator state to a known default, for testing</summary>
       /// There is a lot of state in the GCodeGenerator, like program numbers that
       /// keep incrementing forward. We need to reset all this state to some known defaults
@@ -487,6 +488,8 @@ namespace ChassisCAM.Core.GCodeGen {
          // Following ovverriders
          if (Heads == EHeads.Left || Heads == EHeads.Right) PartitionRatio = 1.0;
          LeftToRightMachining = true;
+
+         GCodeGenSettings = mcs;
       }
       public void ResetBookKeepers () {
          mPgmNo[Utils.EFlange.Web] = 3000;
@@ -750,6 +753,7 @@ namespace ChassisCAM.Core.GCodeGen {
 
          // Following ovverriders
          if (Heads == EHeads.Left || Heads == EHeads.Right) PartitionRatio = 1.0;
+         GCodeGenSettings = MCSettings.It;
       }
       GCodeGenerator () { }
       public void OnNewWorkpiece () {
