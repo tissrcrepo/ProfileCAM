@@ -12,9 +12,9 @@ using ChassisCAM.Core;
 
 namespace ChassisCAM.Core;
 
-public struct NotchAttribute (Curve3 crv, Vector3 stNormal, Vector3 endNormal, Vector3 oFlgNormal,
+public struct NotchAttribute (FCCurve3 crv, Vector3 stNormal, Vector3 endNormal, Vector3 oFlgNormal,
    Vector3 nrBdyVec, XForm4.EAxis proxBdyVec, Vector3 srapSideDir, bool flag = true) {
-   public Curve3 Curve { get; set; } = crv;//Item1
+   public FCCurve3 Curve { get; set; } = crv;//Item1
    public Vector3 StNormal { get; set; } = stNormal;//Item2
    public Vector3 EndNormal { get; set; } = endNormal;//Item3
    public Vector3 OFlangeNormal { get; set; } = oFlgNormal;//Item4
@@ -128,57 +128,57 @@ internal static class Extensions {
 }
 
 #nullable enable
-public static class CloningExtensions {
-   public static Arc3? Clone (this Arc3 arc) {
-      bool exists = Arc3Factory.TryGetPoints (arc, out var s, out var ip1, out var ip2, out var e);
-      if ( exists )
-         return new Arc3 (s, ip1, ip2, e);
-      throw new Exception ("Arc is not cached");
-   }
+//public static class CloningExtensions {
+//   public static Arc3? Clone (this Arc3 arc) {
+//      bool exists = Arc3Factory.TryGetPoints (arc, out var s, out var ip1, out var ip2, out var e);
+//      if ( exists )
+//         return new FCLine3 (s, ip1, ip2, e);
+//      throw new Exception ("Arc is not cached");
+//   }
 
-   public static Line3? Clone (this Line3 line) {
-      // For Line3 (assuming no cache), just create new
-      return new Line3 (line.Start, line.End);
-   }
+//   public static Line3? Clone (this Line3 line) {
+//      // For Line3 (assuming no cache), just create new
+//      return new FCLine3 (line.Start, line.End);
+//   }
 
-   public static Curve3? Clone (this Curve3 curve) {
-      if (curve is Arc3 arc)
-         return arc.Clone ();  // Uses cached Arc3 clone
-      else if (curve is Line3 line)
-         return line.Clone ();  // Creates new Line3
-      else
-         return null;
-   }
-}
+//   public static Curve3? Clone (this Curve3 curve) {
+//      if (curve is Arc3 arc)
+//         return arc.Clone ();  // Uses cached Arc3 clone
+//      else if (curve is Line3 line)
+//         return line.Clone ();  // Creates new FCLine3
+//      else
+//         return null;
+//   }
+//}
 
 public static class GeomExtensions {
-   public static bool IsCircle (this Arc3 arc, double tol = 1e-6) {
+   public static bool IsCircle (this FCArc3 arc, double tol = 1e-6) {
       if (arc.Start.DistTo (arc.End).LTEQ (tol)) return true;
       return false;
    }
-   public static Point3 Center (this Arc3 arc) {
+   public static Point3 Center (this FCArc3 arc) {
       var (cen, _) = Geom.EvaluateCenterAndRadius (arc);
       return cen;
    }
-   public static double Radius (this Arc3 arc) {
+   public static double Radius (this FCArc3 arc) {
       var (_, rad) = Geom.EvaluateCenterAndRadius (arc);
       return rad;
    }
    public static Point3 EvaluatePointAtParam (
-    this Curve3 crv,
+    this FCCurve3 crv,
     double param,
     Vector3? apn = null,
     double tol = 1e-6) {
-      if (crv is Arc3 arc)
+      if (crv is FCArc3 arc)
          return arc.EvaluatePointAtParam (param, apn, tol);
-      else if (crv is Line3 line)
+      else if (crv is FCLine3 line)
          return line.EvaluatePointAtParam (param, apn: null, tol);
       else
          throw new NotImplementedException ("Entity is not implemented");
    }
 
    public static Point3 EvaluatePointAtParam (
-    this Arc3 arc,
+    this FCArc3 arc,
     double param,
     Vector3 apn,
     double tol = 1e-6) {
@@ -219,7 +219,7 @@ public static class GeomExtensions {
    }
 
    public static Point3 EvaluatePointAtParam (
-    this Line3 line,
+    this FCLine3 line,
     double param,
     Vector3? apn = null,
     bool constrainedWithInLine = true,
@@ -306,7 +306,7 @@ public class GCodeSeg {
                     EGCode gcmd, EMove moveType, string toolingName)
       => SetGCLine (stPoint, endPoint, StNormal, EndNormal, gcmd, moveType, toolingName);
 
-   public GCodeSeg (Arc3 arc, Point3 stPoint, Point3 endPoint, Point3 center, double radius,
+   public GCodeSeg (FCArc3 arc, Point3 stPoint, Point3 endPoint, Point3 center, double radius,
                     Vector3 StNormal, EGCode gcmd, EMove moveType, string toolingName)
       => SetGCArc (arc, stPoint, endPoint, center, radius, StNormal, gcmd, moveType, toolingName);
 
@@ -326,8 +326,8 @@ public class GCodeSeg {
    Point3 mStartPoint, mEndPoint, mCenter;
    Vector3 mStartNormal, mEndNormal;
    double mRadius;
-   Arc3 mArc;
-   public Arc3 Arc => mArc;
+   FCArc3 mArc;
+   public FCArc3 Arc => mArc;
    EMove mMoveType;
    public EMove MoveType => mMoveType;
    string mToolingName;
@@ -362,7 +362,7 @@ public class GCodeSeg {
       mToolingName = toolingName;
    }
 
-   public void SetGCArc (Arc3 arc, Point3 stPoint, Point3 endPoint,
+   public void SetGCArc (FCArc3 arc, Point3 stPoint, Point3 endPoint,
                          Point3 center, double radius, Vector3 stNormal,
                          EGCode gcmd, EMove moveType, string toolingName) {
       if (gcmd is not EGCode.G2 and not EGCode.G3)
@@ -753,11 +753,14 @@ public static class Utils {
           a.X * b.Y - a.Y * b.X);
    }
 
-   public static bool IsCircle (Curve3 curve)
-      => curve != null && curve is Arc3 && curve.Start.EQ (curve.End);
+   public static bool IsCircle (FCCurve3 curve)
+      => curve != null && curve is FCArc3 && curve.Start.EQ (curve.End);
 
-   public static bool IsArc (Curve3 curve)
-      => curve != null && curve is Arc3 && !curve.Start.EQ (curve.End);
+   //public static bool IsCircle (FCCurve3 curve)
+   //   => curve != null && curve is FCArc3 && curve.IsCircle;
+
+   public static bool IsArc (FCCurve3 curve)
+      => curve != null && curve is FCArc3 && !curve.Start.EQ (curve.End);
 
    /// <summary>
    /// This method creates and returns a point, which is moved from the 
@@ -928,7 +931,7 @@ public static class Utils {
       else
          newToolingEntryPoint = Geom.GetMidPoint (segmentsList[0].Curve, toolingPlaneNormal);
 
-      if (segmentsList[0].Curve is Arc3 arc)
+      if (segmentsList[0].Curve is FCArc3 arc)
          (toolingDir, _) = Geom.EvaluateTangentAndNormalAtPoint (arc, newToolingEntryPoint, toolingPlaneNormal, tolerance: 1e-3);
       else
          toolingDir = (segmentsList[0].Curve.End - segmentsList[0].Curve.Start).Normalized ();
@@ -955,7 +958,7 @@ public static class Utils {
       else
          newToolingEntryPoint = Geom.GetMidPoint (segmentsList[0].Curve, toolingPlaneNormal);
 
-      if (segmentsList[0].Curve is Arc3 arc)
+      if (segmentsList[0].Curve is FCArc3 arc)
          (toolingDir, _) = Geom.EvaluateTangentAndNormalAtPoint (arc, newToolingEntryPoint, toolingPlaneNormal, tolerance: 1e-3);
       else
          toolingDir = (segmentsList[0].Curve.End - segmentsList[0].Curve.Start).Normalized ();
@@ -972,7 +975,7 @@ public static class Utils {
 
    public static Vector3 GetMaterialRemovalSideDirection (ToolingSegment ts, Point3 pt, EKind featType, ECutKind profileKind = ECutKind.None) {
       var toolingPlaneNormal = ts.Vec0;
-      if (!Geom.IsPointOnCurve (ts.Curve, pt, toolingPlaneNormal, tolerance: (ts.Curve is Arc3) ? 1e-3 : 1e-6))
+      if (!Geom.IsPointOnCurve (ts.Curve, pt, toolingPlaneNormal, tolerance: (ts.Curve is FCArc3) ? 1e-3 : 1e-6))
          throw new Exception ("In GetMaterialRemovalSideDirection: The given point is not on the Tool Segment's Curve");
 
       // Tooling direction as the direction of the st to end point in the case of line OR
@@ -984,7 +987,7 @@ public static class Utils {
       else
          newToolingEntryPoint = Geom.GetMidPoint (ts.Curve, toolingPlaneNormal);
 
-      if (ts.Curve is Arc3 arc)
+      if (ts.Curve is FCArc3 arc)
          (toolingDir, _) = Geom.EvaluateTangentAndNormalAtPoint (arc, newToolingEntryPoint, toolingPlaneNormal, tolerance: 1e-3);
       else
          toolingDir = (ts.Curve.End - ts.Curve.Start).Normalized ();
@@ -1031,7 +1034,7 @@ public static class Utils {
       Point3 bdyPtXMin, bdyPtXMax, bdyPtZMin;
       Vector3 normalAtNotchPt;
       double t;
-      Arc3 arc;
+      //FCArc3 arc;
       bdyPtXMin = new Point3 (bound.XMin, pt.Y, pt.Z);
       bdyPtXMax = new Point3 (bound.XMax, pt.Y, pt.Z);
       switch (profileKind) {
@@ -1042,8 +1045,8 @@ public static class Utils {
                if (bdyYExtreme - pt.Y < 0) proxBdy = XForm4.EAxis.NegY;
                else proxBdy = XForm4.EAxis.Y;
             } else {
-               if (seg.Curve is Arc3) {
-                  //arc = seg.Curve as Arc3;
+               if (seg.Curve is FCArc3) {
+                  //arc = seg.Curve as FCArc3;
                   //var (tgt, _) = Geom.EvaluateTangentAndNormalAtPoint (arc, pt, seg.Vec0.Normalized ());
                   // To find the scrapside normal for arcs
                   // Find the cross of tangent vec with seg normal
@@ -1091,7 +1094,7 @@ public static class Utils {
             double OrdX;
             double OrdY = bound.Min.Y;
             double OrdZ = bound.Max.Z;
-            if (seg.Curve is Arc3) {
+            if (seg.Curve is FCArc3) {
                if (pt.DistTo (bdyPtXMin)
                         < pt.DistTo (bdyPtXMax))
                   proxBdy = XForm4.EAxis.NegX;
@@ -1253,7 +1256,7 @@ public static class Utils {
          double approachLen = gcgen?.ApproachLength ?? MCSettings.It.ApproachLength;
          var approachDistOfArc = approachLen * 4.0;
          double circleRad;
-         if (toolingSegmentsList[0].Curve is Arc3 circle && Utils.IsCircle (circle)) {
+         if (toolingSegmentsList[0].Curve is FCArc3 circle && Utils.IsCircle (circle)) {
             (_, circleRad) = Geom.EvaluateCenterAndRadius (circle);
             if (circleRad < approachDistOfArc) approachDistOfArc = approachLen;
             while (circleRad < approachDistOfArc) {
@@ -1267,10 +1270,10 @@ public static class Utils {
 
          // Compute the tooling direction.
          Vector3 toolingDir;
-         if (toolingSegmentsList[0].Curve is Line3)
+         if (toolingSegmentsList[0].Curve is FCLine3)
             toolingDir = toolingSegmentsList[0].Curve.End - toolingSegmentsList[0].Curve.Start;
          else
-            (toolingDir, _) = Geom.EvaluateTangentAndNormalAtPoint (toolingSegmentsList[0].Curve as Arc3,
+            (toolingDir, _) = Geom.EvaluateTangentAndNormalAtPoint (toolingSegmentsList[0].Curve as FCArc3,
                firstToolingEntryPt, apn, tolerance: 1e-3);
          toolingDir = toolingDir.Normalized ();
 
@@ -1283,9 +1286,9 @@ public static class Utils {
 
          // Find 2 points on the ray from newToolingStPt in the direction of -toolingDir, from the center of the arc
          //var p1 = firstToolingEntryPt - toolingDir * 4.0; var p2 = firstToolingEntryPt - toolingDir * 2.0;
-         Curve3 chord = new Line3 (newToolingStPt, firstToolingEntryPt);
-         var p1 = chord.Evaluate (0.4);
-         var p2 = chord.Evaluate (0.7);
+         FCCurve3 chord = new FCLine3 (newToolingStPt, firstToolingEntryPt);
+         var p1 = chord.Curve.Evaluate (0.4);
+         var p2 = chord.Curve.Evaluate (0.7);
 
          // Compute the vectors from center of the arc to the above points
          var cp1 = (p1 - arcCenter).Normalized (); var cp2 = (p2 - arcCenter).Normalized ();
@@ -1294,10 +1297,10 @@ public static class Utils {
          // intermediate points along the actual direction of the arc
          var ip1 = arcCenter + cp1 * approachArcRad; var ip2 = arcCenter + cp2 * approachArcRad;
 
-         //var (cirCenter, cirRad) = EvaluateCenterAndRadius (toolingSegmentsList[0].Curve as Arc3);
+         //var (cirCenter, cirRad) = EvaluateCenterAndRadius (toolingSegmentsList[0].Curve as FCArc3);
          // Create arc, the fourth point being the midpoint of the arc or starting point
          // if its a circle.
-         Arc3 arc = new (newToolingStPt, ip1, ip2, firstToolingEntryPt);
+         FCArc3 arc = new (newToolingStPt, ip1, ip2, firstToolingEntryPt, toolingSegmentsList[0].Vec0);
          if (Utils.IsCircle (toolingSegmentsList[0].Curve)) {
             modifiedSegmentsList.Add (new (arc, toolingSegmentsList[0].Vec0, toolingSegmentsList[0].Vec0));
             modifiedSegmentsList.Add (toolingSegmentsList[0]);
@@ -1429,8 +1432,8 @@ public static class Utils {
       Vector3 outwardNormalAlongFlange;
       Vector3 vectorOutwardAtStart, vectorOutwardAtEnd, vectorOutwardAtSpecPoint, scrapsideMaterialDir;
 
-      if (segments[segIndex].Curve is Arc3 arc) {
-         // Handle Arc3 curves
+      if (segments[segIndex].Curve is FCArc3 arc) {
+         // Handle FCArc3 curves
          (var center, _) = Geom.EvaluateCenterAndRadius (arc);
 
          vectorOutwardAtSpecPoint = GetVectorToProximalBoundary (
@@ -1464,7 +1467,8 @@ public static class Utils {
          );
       } else {
          // Handle Line3 curves
-         var line = segments[segIndex].Curve as Line3;
+         var line = segments[segIndex].Curve as FCLine3;
+         if (line == null) throw new Exception ("Line of type FCLine is null. Its not expected to be null");
          var p1p2 = line.End - line.Start;
 
          vectorOutwardAtStart = GetVectorToProximalBoundary (
@@ -1624,22 +1628,22 @@ public static class Utils {
       var fixedSegs = segs;
       for (int ii = 1; ii < fixedSegs.Count; ii++) {
          if (!fixedSegs[ii - 1].Curve.End.DistTo (fixedSegs[ii].Curve.Start).EQ (0)) {
-            if (fixedSegs[ii - 1].Curve is Line3 && fixedSegs[ii].Curve is Line3) {
-               var newLine = new Line3 (fixedSegs[ii - 1].Curve.Start, fixedSegs[ii].Curve.Start);
-               var newTS = Geom.CreateToolingSegmentForCurve (newLine as Curve3, fixedSegs[ii - 1].Vec0, fixedSegs[ii].Vec0);
+            if (fixedSegs[ii - 1].Curve is FCLine3 && fixedSegs[ii].Curve is FCLine3) {
+               var newLine = new FCLine3 (fixedSegs[ii - 1].Curve.Start, fixedSegs[ii].Curve.Start);
+               var newTS = Geom.CreateToolingSegmentForCurve (newLine as FCCurve3, fixedSegs[ii - 1].Vec0, fixedSegs[ii].Vec0);
                fixedSegs[ii - 1] = newTS;
-            } else if (fixedSegs[ii - 1].Curve is Arc3 && fixedSegs[ii].Curve is Line3) {
-               var newLine = new Line3 (fixedSegs[ii - 1].Curve.End, fixedSegs[ii].Curve.End);
-               var newTS = Geom.CreateToolingSegmentForCurve (newLine as Curve3, fixedSegs[ii - 1].Vec1, fixedSegs[ii].Vec1);
+            } else if (fixedSegs[ii - 1].Curve is FCArc3 && fixedSegs[ii].Curve is FCLine3) {
+               var newLine = new FCLine3 (fixedSegs[ii - 1].Curve.End, fixedSegs[ii].Curve.End);
+               var newTS = Geom.CreateToolingSegmentForCurve (newLine as FCCurve3, fixedSegs[ii - 1].Vec1, fixedSegs[ii].Vec1);
                fixedSegs[ii] = newTS;
-            } else if (fixedSegs[ii - 1].Curve is Line3 && fixedSegs[ii].Curve is Arc3) {
-               var newLine = new Line3 (fixedSegs[ii - 1].Curve.Start, fixedSegs[ii].Curve.Start);
-               var newTS = Geom.CreateToolingSegmentForCurve (newLine as Curve3, fixedSegs[ii - 1].Vec0, fixedSegs[ii].Vec0);
+            } else if (fixedSegs[ii - 1].Curve is FCLine3 && fixedSegs[ii].Curve is FCArc3) {
+               var newLine = new FCLine3 (fixedSegs[ii - 1].Curve.Start, fixedSegs[ii].Curve.Start);
+               var newTS = Geom.CreateToolingSegmentForCurve (newLine as FCCurve3, fixedSegs[ii - 1].Vec0, fixedSegs[ii].Vec0);
                fixedSegs[ii - 1] = newTS;
-            } else if (fixedSegs[ii - 1].Curve is Arc3 && fixedSegs[ii].Curve is Arc3) {
+            } else if (fixedSegs[ii - 1].Curve is FCArc3 && fixedSegs[ii].Curve is FCArc3) {
                // Create a link line between arcs
-               var newLine = new Line3 (fixedSegs[ii - 1].Curve.End, fixedSegs[ii].Curve.Start);
-               var newTS = Geom.CreateToolingSegmentForCurve (newLine as Curve3, fixedSegs[ii - 1].Vec1, fixedSegs[ii].Vec0);
+               var newLine = new FCLine3 (fixedSegs[ii - 1].Curve.End, fixedSegs[ii].Curve.Start);
+               var newTS = Geom.CreateToolingSegmentForCurve (newLine as FCCurve3, fixedSegs[ii - 1].Vec1, fixedSegs[ii].Vec0);
                fixedSegs.Insert (ii, newTS); ii--;
             } else
                throw new Exception ("Utils.FixSanityOfToolingSegments: Unknown segment type encountered");
@@ -1910,7 +1914,7 @@ public static class Utils {
          if ((segs[kk].Curve.End.X - xVal).EQ (0))
             return new Tuple<Point3, double, int, bool> (segs[kk].Curve.End, 1, kk, true);
 
-         if (segs[kk].Curve is Arc3 arc) {
+         if (segs[kk].Curve is FCArc3 arc) {
             var (c, r) = Geom.EvaluateCenterAndRadius (arc);
             var p1 = new Point3 (xVal, segs[kk].Curve.Start.Y,
                                  c.Z + Math.Sqrt (r * r - (xVal - c.X) * (xVal - c.X)));
@@ -2070,7 +2074,7 @@ public static class Utils {
          throw new Exception ("Sign of the tooling segment (end-start) computation ambiguous");
 
       for (int ii = 0; ii < segments.Count; ii++) {
-         if (segments[ii].Curve is Line3) {
+         if (segments[ii].Curve is FCLine3 fcLine) {
             double diff = -1;
             if (about == "Y")
                diff = segments[ii].Curve.End.Y - segments[ii].Curve.Start.Y;
@@ -2087,8 +2091,8 @@ public static class Utils {
                seg.IsValid = false;
                segments[ii] = seg;
             }
-         } else {
-            var arcPts = (segments[ii].Curve as Arc3).Discretize (0.1).ToList ();
+         } else if (segments[ii].Curve is FCArc3 fcArc) {
+            var arcPts = fcArc.Discretize (0.1).ToList ();
             bool broken = false;
             for (int jj = 1; jj < arcPts.Count; jj++) {
                var diff = arcPts[jj].Y - arcPts[jj - 1].Y;
@@ -2106,7 +2110,8 @@ public static class Utils {
             }
             if (broken)
                continue;
-         }
+         } else
+            throw new Exception ("Unknown type of entity other than FCArc3 or FCLine3 encountered");
       }
    }
 
@@ -2736,7 +2741,7 @@ public static class Utils {
             nextMachiningStart = wjtSeg.Curve.End + scrapSideNormal.Normalized () * approachDistance * 0.5;
       }
 
-      return new ToolingSegment (new Line3 (nextMachiningStart, wjtSeg.Curve.End) as Curve3, wjtSeg.Vec1, wjtSeg.Vec1);
+      return new ToolingSegment (new FCLine3 (nextMachiningStart, wjtSeg.Curve.End) as FCCurve3, wjtSeg.Vec1, wjtSeg.Vec1);
    }
 
    public static string BuildDINFileName (string filename, int head, MCSettings.PartConfigType partCfgType, string dinFilenameSuffix) {
@@ -2822,7 +2827,7 @@ public static class Utils {
       double cumLen = 0;
       for (int ii = 0; ii < segs.Count; ii++) {
          if (ii == 0) {
-            Arc3 arc = segs[0].Curve as Arc3;
+            FCArc3? arc = segs[0].Curve as FCArc3;
             // In lead ins, the length of the arc is 2*Pi*r/4 / specified in LeadInApproachArcAngle degrees (90 def)
             var (_, rad) = EvaluateCenterAndRadius (arc);
             //cumLen += Math.PI * rad / 2;
@@ -2843,7 +2848,7 @@ public static class Utils {
       double cumLen = 0;
       for (int ii = startIndex; ii <= endIndex; ii++) {
          if (ii == 0 && leadIn) {
-            Arc3 arc = segs[0].Curve as Arc3;
+            FCArc3? arc = segs[0].Curve as FCArc3;
             // In lead ins, the length of the arc is 2*Pi*r/4 = Pi*r/2;
             var (_, rad) = EvaluateCenterAndRadius (arc);
             //cumLen += Math.PI * rad / 2;
@@ -2869,10 +2874,10 @@ public static class Utils {
          throw new ArgumentException ("List of tooling segments is empty", nameof (toolingSegs));
       else if (toolingSegs.Count == 1) {
          var seg = toolingSegs[0].Curve;
-         if (seg is Line3)
+         if (seg is FCLine3)
             throw new Exception ("The single segment of the tooling item is not an Arc");
-         var arc3 = Utils.ModifyCircleForToolDiaCompensation (seg as Arc3, toolingSegs[0].Vec0);
-         resSegs = [Geom.CreateToolingSegmentForCurve (toolingSegs[0], arc3 as Curve3)];
+         var arc3 = Utils.ModifyCircleForToolDiaCompensation (seg as FCArc3, toolingSegs[0].Vec0);
+         resSegs = [Geom.CreateToolingSegmentForCurve (toolingSegs[0], arc3 as FCCurve3)];
       } else {
          var ssegs = toolingSegs;
 
@@ -2913,8 +2918,8 @@ public static class Utils {
       return resSegs;
    }
 
-   public static Arc3 ModifyCircleForToolDiaCompensation (Arc3 arc, Vector3 apn) {
-      if (!Utils.IsCircle (arc as Curve3))
+   public static FCArc3 ModifyCircleForToolDiaCompensation (FCArc3 arc, Vector3 apn) {
+      if (!Utils.IsCircle (arc as FCCurve3))
          return arc;
       var (cen, rad) = Geom.EvaluateCenterAndRadius (arc);
       Point3 newStPt = new (rad + cen.X, cen.Y, cen.Z);
@@ -2926,7 +2931,7 @@ public static class Utils {
 
       (cen, rad) = Geom.EvaluateCenterAndRadius (arc);
 
-      return new Arc3 (newStPt, intPoint1, intPoint2, newStPt);
+      return new FCArc3 (newStPt, intPoint1, intPoint2, newStPt, apn);
    }
 
    public static bool IsFlexCutSegment (ToolingSegment ts) {

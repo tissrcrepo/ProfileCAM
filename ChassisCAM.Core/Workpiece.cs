@@ -353,7 +353,7 @@ namespace ChassisCAM.Core {
             if (cut.Kind == EKind.Cutout) {
                if (cut.Segs[0].Curve.Start.DistTo (cut.Segs[^1].Curve.End).SGT (0)) {
                   var refToolingSegment = new ToolingSegment (cut.Segs[0].Curve, cut.Segs[^1].Vec1, cut.Segs[0].Vec0);
-                  var missingTs = Geom.CreateToolingSegmentForCurve (refToolingSegment, new Line3 (cut.Segs[^1].Curve.End, cut.Segs[0].Curve.Start));
+                  var missingTs = Geom.CreateToolingSegmentForCurve (refToolingSegment, new FCLine3 (cut.Segs[^1].Curve.End, cut.Segs[0].Curve.Start));
                   modifidSegs.Add (missingTs);
                   cut.Segs = modifidSegs;
                }

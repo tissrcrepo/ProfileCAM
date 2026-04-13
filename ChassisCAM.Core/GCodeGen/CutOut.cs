@@ -290,7 +290,7 @@ namespace ChassisCAM.Core.GCodeGen {
                         wjtDist = startPt.DistTo (endPt);
 
                         // Compute the normal at the wjtPtAtFlex
-                        if (splitToolSegs[0].Curve is Arc3)
+                        if (splitToolSegs[0].Curve is FCArc3)
                            endNormal = ToolingSegments[segIndexToSplit].Vec0;
                         else {
                            var t = splitToolSegs[0].Curve.Length / ToolingSegments[segIndexToSplit].Curve.Length;
@@ -299,7 +299,7 @@ namespace ChassisCAM.Core.GCodeGen {
 
                         // Create new tooling segment from end of the curve at ToolingSegments[mCutOutBlocks[ii].EndIndex].Curve to
                         // the end of splitToolSegs[0].Curve
-                        var ts = Geom.CreateToolingSegmentForCurve (new Line3 (startPt, endPt) as Curve3, startNormal, endNormal);
+                        var ts = Geom.CreateToolingSegmentForCurve (new FCLine3 (startPt, endPt) as FCCurve3, startNormal, endNormal);
                         wjtDist = ts.Curve.Length;
 
                         // The wire joint segment in ToolingSegments with "mCutOutBlocks[ii].EndIndex + 1" -th seg 
@@ -632,7 +632,7 @@ namespace ChassisCAM.Core.GCodeGen {
       static void CheckToolingSegs (List<ToolingSegment> tss) {
          for (int ii = 1; ii < tss.Count; ii++) {
             if (!tss[ii].Curve.Start.EQ (tss[ii - 1].Curve.End)) {
-               var ts1 = Geom.CreateToolingSegmentForCurve (new Line3 (tss[ii - 1].Curve.End, tss[ii].Curve.Start), tss[ii - 1].Vec1, tss[ii].Vec0);
+               var ts1 = Geom.CreateToolingSegmentForCurve (new FCLine3 (tss[ii - 1].Curve.End, tss[ii].Curve.Start), tss[ii - 1].Vec1, tss[ii].Vec0);
                tss.Insert (ii, ts1);
                ii--;
             }

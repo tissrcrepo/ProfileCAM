@@ -24,14 +24,14 @@ public class ToolScope<T> where T : Tooling {
       StartX = double.MaxValue;
       EndX = double.MinValue;
       foreach (var seg in segs) {
-         if (seg.Curve is Line3 line) {
+         if (seg.Curve is FCLine3 line) {
             if (StartX > line.Start.X)
                StartX = line.Start.X;
             if (EndX < line.End.X)
                EndX = line.End.X;
-         } else // Arc3
+         } else // FCArc3
             {
-            Arc3 arc = seg.Curve as Arc3;
+            FCArc3 arc = seg.Curve as FCArc3;
             var (cen, rad) = Geom.EvaluateCenterAndRadius (arc);
             var pt1X = cen.X - rad; var pt2X = cen.X + rad;
             var pt1 = new Point3 (pt1X, cen.Y, cen.Z);

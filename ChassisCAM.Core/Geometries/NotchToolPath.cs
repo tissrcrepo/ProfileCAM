@@ -220,12 +220,12 @@ namespace ChassisCAM.Core.Geometries {
             int segIndex = mNotchPos[ii].Index;
 
             // If the current segindex-th curve is arc when the previous segment is line
-            if ((segIndex - 1 >= 0 && mTs[segIndex - 1].Curve is Line3 && mTs[segIndex].Curve is Arc3) ||
-               (segIndex == 0 && mTs[segIndex].Curve is Arc3)
+            if ((segIndex - 1 >= 0 && mTs[segIndex - 1].Curve is FCLine3 && mTs[segIndex].Curve is FCArc3) ||
+               (segIndex == 0 && mTs[segIndex].Curve is FCArc3)
                ) {
-               Arc3 firstArc = mTs[segIndex].Curve as Arc3;
+               FCArc3 firstArc = mTs[segIndex].Curve as FCArc3;
                (angle, sense) = Geom.GetArcAngleAndSense (firstArc, mTs[segIndex].Vec0.Normalized (), hintSense: Utils.EArcSense.Infer);
-            } else if (mTs[segIndex].Curve is Line3) {
+            } else if (mTs[segIndex].Curve is FCLine3) {
                sense = EArcSense.Infer;
             }
 
@@ -242,7 +242,7 @@ namespace ChassisCAM.Core.Geometries {
             // Example: Arc 1, 2 and then line 2-3. The -lengthfromPt occurs at 2', on Arc 1-2, but between 1-2, near 2, so that the
             // length of arc from 2' to the line length of 2-3 is WJT. In this case, I split Arcs to form Arc 1-2' and Arc2' - 2, 
             // remove the arc 1-2 and line 2-3, and in the place add Arc1-2' and Line2'-3 . 2' is targetPos.Value.position. 
-            // The index of Arc1-2 is targetPos.Value.segIndex and index of Line3 is endSegmentIndex
+            // The index of Arc1-2 is targetPos.Value.segIndex and index of FCLine3 is endSegmentIndex
             if (mNotchPos[ii].SegPositionType == SegmentedPositionType.Flex1WJTStart) {
 
                // Find the index of the PreFlex1WJTStart notch point in the Segments List mTs. If the PreFlex1WJTStart's index 
@@ -266,7 +266,7 @@ namespace ChassisCAM.Core.Geometries {
                   var splitCurves = Geom.SplitCurve (mTs[preFlexWJTSegEndNotchPointSegIndex].Curve, [preFlexWJTSegEndNotchPoint], mTs[preFlexWJTSegEndNotchPointSegIndex].Vec0);
                   var ts1 = new ToolingSegment (splitCurves[0], mTs[preFlexWJTSegEndNotchPointSegIndex].Vec0, mTs[preFlexWJTSegEndNotchPointSegIndex].Vec1);
 
-                  var line = new Line3 (preFlexWJTSegEndNotchPoint, newSegEndPoint);
+                  var line = new FCLine3 (preFlexWJTSegEndNotchPoint, newSegEndPoint);
                   var ts2 = new ToolingSegment (line, mTs[preFlexWJTSegEndNotchPointSegIndex].Vec1, mTs[preFlexWJTSegEndNotchPointSegIndex].Vec1);
                   List<ToolingSegment> newTSS = [ts1, ts2];
 
@@ -292,7 +292,7 @@ namespace ChassisCAM.Core.Geometries {
                   //   (angle, sense) = Geom.GetArcAngleAtPoint (arc, new Vector3 (0, 0, 1));
                   var crvs = Geom.SplitCurve (mTs[segIndex].Curve,
                                                        [mNotchPos[ii].Position],
-                                                       mTs[segIndex].Vec0.Normalized (), hintSense: sense, tolerance: (mTs[segIndex].Curve is Arc3) ? 1e-3 : 1e-6);
+                                                       mTs[segIndex].Vec0.Normalized (), hintSense: sense, tolerance: (mTs[segIndex].Curve is FCArc3) ? 1e-3 : 1e-6);
                   if (crvs.Count > 1) {
                      var toolSegsForCrvs = Geom.CreateToolingSegmentForCurves (mTs[segIndex], crvs);
                      mTs.RemoveAt (segIndex);
@@ -309,7 +309,7 @@ namespace ChassisCAM.Core.Geometries {
             } else {
                var crvs = Geom.SplitCurve (mTs[segIndex].Curve,
                                                     [mNotchPos[ii].Position],
-                                                    mTs[segIndex].Vec0.Normalized (), hintSense: sense, tolerance: (mTs[segIndex].Curve is Arc3) ? 1e-3 : 1e-6);
+                                                    mTs[segIndex].Vec0.Normalized (), hintSense: sense, tolerance: (mTs[segIndex].Curve is FCArc3) ? 1e-3 : 1e-6);
                if (crvs.Count > 1) {
                   var toolSegsForCrvs = Geom.CreateToolingSegmentForCurves (mTs[segIndex], crvs);
                   mTs.RemoveAt (segIndex);
@@ -338,7 +338,7 @@ namespace ChassisCAM.Core.Geometries {
          // Testing and asserting
          for (int ii = 1; ii < mNotchPos.Count - 1; ii++) {
             double tol = 1e-6;
-            if (mTs[mNotchPos[ii].Index].Curve is Arc3) tol = 1e-4;
+            if (mTs[mNotchPos[ii].Index].Curve is FCArc3) tol = 1e-4;
             if (!mNotchPos[ii].Position.DistTo (mTs[mNotchPos[ii].Index].Curve.End).EQ (0, tol))
                throw new Exception ("Segmentation fault");
          }
@@ -430,7 +430,7 @@ namespace ChassisCAM.Core.Geometries {
          // Testing and asserting
          for (int ii = 1; ii < mNotchPos.Count - 1; ii++) {
             double tol = 1e-6;
-            if (mTs[mNotchPos[ii].Index].Curve is Arc3) tol = 1e-4;
+            if (mTs[mNotchPos[ii].Index].Curve is FCArc3) tol = 1e-4;
             if (!mNotchPos[ii].Position.DistTo (mTs[mNotchPos[ii].Index].Curve.End).EQ (0, tol))
                throw new Exception ("Segmentation fault");
          }
@@ -452,7 +452,7 @@ namespace ChassisCAM.Core.Geometries {
          // Testing and asserting
          for (int ii = 1; ii < mNotchPos.Count - 1; ii++) {
             double tol = 1e-6;
-            if (mTs[mNotchPos[ii].Index].Curve is Arc3) tol = 1e-4;
+            if (mTs[mNotchPos[ii].Index].Curve is FCArc3) tol = 1e-4;
             if (!mNotchPos[ii].Position.DistTo (mTs[mNotchPos[ii].Index].Curve.End).EQ (0, tol))
                throw new Exception ("Segmentation fault");
          }
@@ -472,7 +472,7 @@ namespace ChassisCAM.Core.Geometries {
          // Testing and asserting
          for (int ii = 1; ii < mNotchPos.Count - 1; ii++) {
             double tol = 1e-6;
-            if (mTs[mNotchPos[ii].Index].Curve is Arc3) tol = 1e-4;
+            if (mTs[mNotchPos[ii].Index].Curve is FCArc3) tol = 1e-4;
             if (!mNotchPos[ii].Position.DistTo (mTs[mNotchPos[ii].Index].Curve.End).EQ (0, tol))
                throw new Exception ("Segmentation fault");
          }
@@ -486,7 +486,7 @@ namespace ChassisCAM.Core.Geometries {
          // Testing and asserting
          for (int ii = 1; ii < mNotchPos.Count - 1; ii++) {
             double tol = 1e-6;
-            if (mTs[mNotchPos[ii].Index].Curve is Arc3) tol = 1e-4;
+            if (mTs[mNotchPos[ii].Index].Curve is FCArc3) tol = 1e-4;
             if (!mNotchPos[ii].Position.DistTo (mTs[mNotchPos[ii].Index].Curve.End).EQ (0, tol))
                throw new Exception ("Segmentation fault");
          }
@@ -506,7 +506,7 @@ namespace ChassisCAM.Core.Geometries {
             for (int kk = 0; kk < mTs.Count; kk++) {
                var dist = mTs[kk].Curve.End.DistTo (mNotchPos[ii].Position);
                double tol = 1e-6;
-               if (mTs[kk].Curve is Arc3) tol = 1e-3;
+               if (mTs[kk].Curve is FCArc3) tol = 1e-3;
                if (dist.EQ (0, tol)) {
                   segIndex = kk;
                   break;
@@ -1069,7 +1069,7 @@ namespace ChassisCAM.Core.Geometries {
 
          for (int ii = 0; ii < mTs.Count; ii++) {
             var segment = mTs[ii];
-            if (segment.Curve is Arc3) {
+            if (segment.Curve is FCArc3) {
                int aa = 0;
                ++aa;
             }
@@ -1177,7 +1177,7 @@ namespace ChassisCAM.Core.Geometries {
          // 1. First check if fromPt matches any segment's end point and lengthFromFromPt is 0
          var endSegmentIndex = mTs.FindIndex (ts => ts.Curve.End.DistTo (fromPt).EQ (0, tolerance));
          if (endSegmentIndex != -1 && lengthFromFromPt.EQ (0, tolerance)) {
-            if (mTs[endSegmentIndex].Curve is Arc3) {
+            if (mTs[endSegmentIndex].Curve is FCArc3) {
                int aa = 0;
                ++aa;
             }
@@ -1200,7 +1200,7 @@ namespace ChassisCAM.Core.Geometries {
             accumulatedLength += mTs[ii].Length;
 
          var startSegment = mTs[startSegIndex];
-         if (mTs[startSegIndex].Curve is Arc3) {
+         if (mTs[startSegIndex].Curve is FCArc3) {
             int aa = 0;
             ++aa;
          }
@@ -1231,7 +1231,7 @@ namespace ChassisCAM.Core.Geometries {
          // of the curve of the last segment is to be returned
          if (targetLength.EQ (PathLength, tolerance)) {
             int lastIdx = mTs.Count - 1;
-            if (mTs[lastIdx].Curve is Arc3) {
+            if (mTs[lastIdx].Curve is FCArc3) {
                int aa = 0;
                ++aa;
             }

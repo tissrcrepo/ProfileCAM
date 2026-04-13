@@ -199,7 +199,7 @@ namespace ChassisCAM.Core.GCodeGen {
                      arcCenter = Geom.V2P (mXformRH * arcCenter);
                   }
 
-                  Arc3 arc = null;
+                  FCArc3 arc = null;
                   if (eGCodeVal == EGCode.G2) arc = Geom.CreateArc (arcStartPoint, arcEndPoint, arcCenter, normal, Utils.EArcSense.CW);
                   else arc = Geom.CreateArc (arcStartPoint, arcEndPoint, arcCenter, normal, Utils.EArcSense.CCW);
 
@@ -1465,16 +1465,16 @@ namespace ChassisCAM.Core.GCodeGen {
       /// <param name="toolingName">Tooling name (for simulation data)</param>
       /// <param name="isFlexSection">Flag, true if the tooling is on flex, 
       /// false otherwise</param>
-      public void WriteCurve (Curve3 curve, Vector3 stNormal, Vector3 endNormal,
+      public void WriteCurve (FCCurve3 fcCurve, Vector3 stNormal, Vector3 endNormal,
          string toolingName, bool relativeCoords = false,
          Point3? refStPt = null) {
          /* current normal plane type (at the end) */
          var currPlaneType = Utils.GetArcPlaneType (endNormal, XForm4.IdentityXfm);
-         if (curve is Line3)
-            WriteLineSeg (curve.Start, curve.End, stNormal, endNormal, toolingName, relativeCoords: relativeCoords, refStPt: refStPt);
-         else if (curve is Arc3) {
-            var (cen, _) = Geom.EvaluateCenterAndRadius (curve as Arc3);
-            WriteArc (curve as Arc3, currPlaneType,
+         if (fcCurve is FCLine3)
+            WriteLineSeg (fcCurve.Start, fcCurve.End, stNormal, endNormal, toolingName, relativeCoords: relativeCoords, refStPt: refStPt);
+         else if (fcCurve is FCArc3 fcArc) {
+            var (cen, _) = Geom.EvaluateCenterAndRadius (fcArc);
+            WriteArc (fcArc, currPlaneType,
                cen, stNormal, toolingName, relativeCoords, refStPt: refStPt);
          }
       }
@@ -1495,7 +1495,7 @@ namespace ChassisCAM.Core.GCodeGen {
       /// is same as start normal</param>
       /// <param name="toolingName">Name of the tooling for simulation and debug</param>
       /// <exception cref="ArgumentException"></exception>
-      public void WriteArc (Arc3 arc, Utils.EPlane arcPlaneType, Utils.EFlange arcFlangeType,
+      public void WriteArc (FCArc3 fcArc, Utils.EPlane arcPlaneType, Utils.EFlange arcFlangeType,
          Point3 arcCenter, Point3 arcStartPoint, Point3 arcEndPoint, Vector3 startNormal,
          string toolingName, PointVec? flexRef = null, bool relativeCoords = false) {
          Utils.EArcSense arcType;
@@ -1505,7 +1505,7 @@ namespace ChassisCAM.Core.GCodeGen {
             Utils.EPlane.YNeg => -XForm4.mYAxis,
             _ => throw new Exception ("Arc can not be written onflex plane")
          };
-         var (_, arcSense) = Geom.GetArcAngleAndSense (arc, apn);
+         var (_, arcSense) = Geom.GetArcAngleAndSense (fcArc, apn);
 
          // Both in YNeg and YPos plane, PLC is taking a different reference
          // Z axis is decreasing while moving from top according to Eckelmann controller
@@ -1533,14 +1533,14 @@ namespace ChassisCAM.Core.GCodeGen {
          EGCode gCmd;
          if (arcType == Utils.EArcSense.CW) gCmd = EGCode.G2; else gCmd = EGCode.G3;
          if (!CreateDummyBlock4Master) {
-            mTraces[(int)Head].Add (new GCodeSeg (arc, arcStartPoint, arcEndPoint, arcCenter, radius, startNormal,
+            mTraces[(int)Head].Add (new GCodeSeg (fcArc, arcStartPoint, arcEndPoint, arcCenter, radius, startNormal,
                gCmd, EMove.Machining, toolingName));
             mToolPos[(int)Head] = arcEndPoint;
             mToolVec[(int)Head] = startNormal;
          }
          switch (arcFlangeType) {
             case Utils.EFlange.Web:
-               if (Utils.IsArc (arc))
+               if (Utils.IsArc (fcArc))
                   Utils.ArcMachining (sw, arcType, arcSt2CenVec.X, OrdinateAxis.Y, arcSt2CenVec.Y, mcCoordArcEndPoint2D.X,
                      mcCoordArcEndPoint2D.Y, arcFlangeType, PartConfigType,
                      PartConfigType == PartConfigType.LHComponent ? mXformLHInv.InvertNew () : mXformRHInv.InvertNew ());
@@ -1551,7 +1551,7 @@ namespace ChassisCAM.Core.GCodeGen {
                      mcCoordArcCenter, radius, mcCoordArcStPoint);
                break;
             case Utils.EFlange.Bottom:
-               if (Utils.IsArc (arc))
+               if (Utils.IsArc (fcArc))
                   Utils.ArcMachining (sw, arcType, arcSt2CenVec.X, OrdinateAxis.Z, arcSt2CenVec.Y, mcCoordArcEndPoint2D.X,
                      mcCoordArcEndPoint2D.Y, arcFlangeType, PartConfigType,
                      PartConfigType == PartConfigType.LHComponent ? mXformLHInv.InvertNew () : mXformRHInv.InvertNew ());
@@ -1562,7 +1562,7 @@ namespace ChassisCAM.Core.GCodeGen {
                      mcCoordArcCenter, radius, mcCoordArcStPoint);
                break;
             case Utils.EFlange.Top:
-               if (Utils.IsArc (arc))
+               if (Utils.IsArc (fcArc))
                   Utils.ArcMachining (sw, arcType, arcSt2CenVec.X, OrdinateAxis.Z, arcSt2CenVec.Y, mcCoordArcEndPoint2D.X,
                      mcCoordArcEndPoint2D.Y, arcFlangeType, PartConfigType,
                      PartConfigType == PartConfigType.LHComponent ? mXformLHInv.InvertNew () : mXformRHInv.InvertNew ());
@@ -1577,6 +1577,88 @@ namespace ChassisCAM.Core.GCodeGen {
          }
       }
 
+//      public void WriteArc (FCArc3 fcArc, Utils.EPlane arcPlaneType, Utils.EFlange arcFlangeType,
+//         Point3 arcCenter, Point3 arcStartPoint, Point3 arcEndPoint, Vector3 startNormal,
+//         string toolingName, PointVec? flexRef = null, bool relativeCoords = false) {
+//         Utils.EArcSense arcType;
+//         var apn = arcPlaneType switch {
+//            Utils.EPlane.Top => XForm4.mZAxis,
+//            Utils.EPlane.YPos => XForm4.mYAxis,
+//            Utils.EPlane.YNeg => -XForm4.mYAxis,
+//            _ => throw new Exception ("Arc can not be written onflex plane")
+//         };
+//         var (_, arcSense) = Geom.GetArcAngleAndSense (fcArc, apn);
+
+//         // Both in YNeg and YPos plane, PLC is taking a different reference
+//         // Z axis is decreasing while moving from top according to Eckelmann controller
+//         // So need to reverse clockwise and counter clockwise option
+//         /*^ (arcPlaneType == FChassisUtils.EPlane.Top && !Options.ReverseY)*/
+//         if (arcSense == Utils.EArcSense.CCW) arcType = Utils.EArcSense.CCW;
+//         else arcType = Utils.EArcSense.CW;
+//         arcStartPoint = Utils.MovePoint (arcStartPoint, startNormal, Standoff);
+//         arcEndPoint = Utils.MovePoint (arcEndPoint, startNormal, Standoff);
+//         arcCenter = Utils.MovePoint (arcCenter, startNormal, Standoff);
+
+//         // Transform the arc end point to machine coordinate system
+//         var mcCoordArcCenter = XfmToMachine (arcCenter);
+//         var mcCoordArcStPoint = XfmToMachine (arcStartPoint);
+//         var mcCoordArcEndPoint = XfmToMachine (arcEndPoint);
+//         var mcCoordArcCenter2D = Utils.ToPlane (mcCoordArcCenter, arcPlaneType);
+//         var mcCoordArcStPoint2D = Utils.ToPlane (mcCoordArcStPoint, arcPlaneType);
+//         var mcCoordArcEndPoint2D = Utils.ToPlane (mcCoordArcEndPoint, arcPlaneType);
+//         var arcSt2CenVec = mcCoordArcCenter2D - mcCoordArcStPoint2D; // This gives I and J
+//         var radius = arcSt2CenVec.Length;
+
+//#if DEBUG_ROUND3
+//         arcSt2CenVec = arcSt2CenVec.Round (3);
+//#endif
+//         EGCode gCmd;
+//         if (arcType == Utils.EArcSense.CW) gCmd = EGCode.G2; else gCmd = EGCode.G3;
+//         if (!CreateDummyBlock4Master) {
+//            mTraces[(int)Head].Add (new GCodeSeg (fcArc.Arc, arcStartPoint, arcEndPoint, arcCenter, radius, startNormal,
+//               gCmd, EMove.Machining, toolingName));
+//            mToolPos[(int)Head] = arcEndPoint;
+//            mToolVec[(int)Head] = startNormal;
+//         }
+//         switch (arcFlangeType) {
+//            case Utils.EFlange.Web:
+//               if (Utils.IsArc (fcArc.Arc))
+//                  Utils.ArcMachining (sw, arcType, arcSt2CenVec.X, OrdinateAxis.Y, arcSt2CenVec.Y, mcCoordArcEndPoint2D.X,
+//                     mcCoordArcEndPoint2D.Y, arcFlangeType, PartConfigType,
+//                     PartConfigType == PartConfigType.LHComponent ? mXformLHInv.InvertNew () : mXformRHInv.InvertNew ());
+//               else
+//                  Utils.CircularMachining (sw, arcType, arcSt2CenVec.X, OrdinateAxis.Y, arcSt2CenVec.Y, arcFlangeType, PartConfigType,
+//                     PartConfigType == PartConfigType.LHComponent ? mXformLHInv.InvertNew () : mXformRHInv.InvertNew (),
+//                     machine: Machine,
+//                     mcCoordArcCenter, radius, mcCoordArcStPoint);
+//               break;
+//            case Utils.EFlange.Bottom:
+//               if (Utils.IsArc (fcArc.Arc))
+//                  Utils.ArcMachining (sw, arcType, arcSt2CenVec.X, OrdinateAxis.Z, arcSt2CenVec.Y, mcCoordArcEndPoint2D.X,
+//                     mcCoordArcEndPoint2D.Y, arcFlangeType, PartConfigType,
+//                     PartConfigType == PartConfigType.LHComponent ? mXformLHInv.InvertNew () : mXformRHInv.InvertNew ());
+//               else
+//                  Utils.CircularMachining (sw, arcType, arcSt2CenVec.X, OrdinateAxis.Z, arcSt2CenVec.Y, arcFlangeType, PartConfigType,
+//                     PartConfigType == PartConfigType.LHComponent ? mXformLHInv.InvertNew () : mXformRHInv.InvertNew (),
+//                     machine: Machine,
+//                     mcCoordArcCenter, radius, mcCoordArcStPoint);
+//               break;
+//            case Utils.EFlange.Top:
+//               if (Utils.IsArc (fcArc.Arc))
+//                  Utils.ArcMachining (sw, arcType, arcSt2CenVec.X, OrdinateAxis.Z, arcSt2CenVec.Y, mcCoordArcEndPoint2D.X,
+//                     mcCoordArcEndPoint2D.Y, arcFlangeType, PartConfigType,
+//                     PartConfigType == PartConfigType.LHComponent ? mXformLHInv.InvertNew () : mXformRHInv.InvertNew ());
+//               else
+//                  Utils.CircularMachining (sw, arcType, arcSt2CenVec.X, OrdinateAxis.Z, arcSt2CenVec.Y, arcFlangeType, PartConfigType,
+//                     PartConfigType == PartConfigType.LHComponent ? mXformLHInv.InvertNew () : mXformRHInv.InvertNew (),
+//                     machine: Machine,
+//                     mcCoordArcCenter, radius, mcCoordArcStPoint);
+//               break;
+//            default:
+//               throw new ArgumentException ("Arc is ill-defined perhaps on the flex");
+//         }
+//      }
+
       /// <summary>
       /// This method is used to write G Code for an arc segment
       /// </summary>
@@ -1589,11 +1671,11 @@ namespace ChassisCAM.Core.GCodeGen {
       /// <param name="toolingName"></param>
       /// <exception cref="Exception">If arc is to be written on Flex section</exception>
       /// <exception cref="ArgumentException">If the arc is ill-defined</exception>
-      void WriteArc (Arc3 arc, Utils.EPlane arcPlaneType,
+      void WriteArc (FCArc3 fcArc, Utils.EPlane arcPlaneType,
          Point3 arcCenter, Vector3 startNormal, string toolingName, bool relativeCoords = false,
          Point3? refStPt = null) {
-         var arcStartPoint = arc.Start;
-         var arcEndPoint = arc.End;
+         var arcStartPoint = fcArc.Start;
+         var arcEndPoint = fcArc.End;
          Utils.EArcSense arcType;
          var apn = arcPlaneType switch {
             Utils.EPlane.Top => XForm4.mZAxis,
@@ -1601,7 +1683,7 @@ namespace ChassisCAM.Core.GCodeGen {
             Utils.EPlane.YNeg => -XForm4.mYAxis,
             _ => throw new Exception ("Arc can not be written onflex plane")
          };
-         var (_, arcSense) = Geom.GetArcAngleAndSense (arc, apn);
+         var (_, arcSense) = Geom.GetArcAngleAndSense (fcArc, apn);
 
          // Both in YNeg and YPos plane, PLC is taking a different reference
          // Z axis is decreasing while moving from top according to Eckelmann controller
@@ -1639,7 +1721,7 @@ namespace ChassisCAM.Core.GCodeGen {
          EGCode gCmd;
          if (arcType == Utils.EArcSense.CW) gCmd = EGCode.G2; else gCmd = EGCode.G3;
          if (!CreateDummyBlock4Master) {
-            mTraces[(int)Head].Add (new GCodeSeg (arc, arcStartPoint, arcEndPoint, arcCenter, radius, startNormal,
+            mTraces[(int)Head].Add (new GCodeSeg (fcArc, arcStartPoint, arcEndPoint, arcCenter, radius, startNormal,
             gCmd, EMove.Machining, toolingName));
             mToolPos[(int)Head] = arcEndPoint;
             mToolVec[(int)Head] = startNormal;
@@ -1648,7 +1730,7 @@ namespace ChassisCAM.Core.GCodeGen {
          Utils.EFlange arcFlangeType = Utils.GetArcPlaneFlangeType (startNormal, GetXForm ());
          switch (arcFlangeType) {
             case Utils.EFlange.Web:
-               if (Utils.IsArc (arc))
+               if (Utils.IsArc (fcArc))
                   Utils.ArcMachining (sw, arcType, arcSt2CenVec.X, OrdinateAxis.Y, arcSt2CenVec.Y, mcCoordArcEndPoint2D.X,
                      mcCoordArcEndPoint2D.Y, arcFlangeType, PartConfigType,
                      PartConfigType == PartConfigType.LHComponent ? mXformLHInv.InvertNew () : mXformRHInv.InvertNew ());
@@ -1659,7 +1741,7 @@ namespace ChassisCAM.Core.GCodeGen {
                      mcCoordArcCenter, radius, mcCoordArcStPoint);
                break;
             case Utils.EFlange.Bottom:
-               if (Utils.IsArc (arc))
+               if (Utils.IsArc (fcArc))
                   Utils.ArcMachining (sw, arcType, arcSt2CenVec.X, OrdinateAxis.Z, arcSt2CenVec.Y, mcCoordArcEndPoint2D.X,
                      mcCoordArcEndPoint2D.Y, arcFlangeType, PartConfigType,
                      PartConfigType == PartConfigType.LHComponent ? mXformLHInv.InvertNew () : mXformRHInv.InvertNew ());
@@ -1670,7 +1752,7 @@ namespace ChassisCAM.Core.GCodeGen {
                      mcCoordArcCenter, radius, mcCoordArcStPoint);
                break;
             case Utils.EFlange.Top:
-               if (Utils.IsArc (arc))
+               if (Utils.IsArc (fcArc))
                   Utils.ArcMachining (sw, arcType, arcSt2CenVec.X, OrdinateAxis.Z, arcSt2CenVec.Y, mcCoordArcEndPoint2D.X,
                      mcCoordArcEndPoint2D.Y, arcFlangeType, PartConfigType,
                      PartConfigType == PartConfigType.LHComponent ? mXformLHInv.InvertNew () : mXformRHInv.InvertNew ());
@@ -2109,8 +2191,8 @@ namespace ChassisCAM.Core.GCodeGen {
             // until its not lesser than 0.5. 0.5 is the lower limit.
             var approachDistOfArc = ApproachLength * 4.0;
             double circleRad;
-            if (toolingItem.Segs.ToList ()[0].Curve is Arc3 circle && Utils.IsCircle (circle)) {
-               (_, circleRad) = Geom.EvaluateCenterAndRadius (circle);
+            if (toolingItem.Segs.ToList ()[0].Curve is FCArc3 fcArc && Utils.IsCircle (fcArc)) {
+               (_, circleRad) = Geom.EvaluateCenterAndRadius (fcArc);
                if (circleRad < approachDistOfArc) approachDistOfArc = ApproachLength;
                while (circleRad < approachDistOfArc) {
                   if (approachDistOfArc < mCurveLeastLength) break;
@@ -2123,10 +2205,10 @@ namespace ChassisCAM.Core.GCodeGen {
 
             // Compute the tooling direction.
             Vector3 toolingDir;
-            if (toolingSegmentsList[0].Curve is Line3)
+            if (toolingSegmentsList[0].Curve is FCLine3)
                toolingDir = toolingSegmentsList[0].Curve.End - toolingSegmentsList[0].Curve.Start;
             else
-               (toolingDir, _) = Geom.EvaluateTangentAndNormalAtPoint (toolingSegmentsList[0].Curve as Arc3,
+               (toolingDir, _) = Geom.EvaluateTangentAndNormalAtPoint (toolingSegmentsList[0].Curve as FCArc3,
                   firstToolingEntryPt, apn, tolerance: 1e-3);
             toolingDir = toolingDir.Normalized ();
 
@@ -2149,16 +2231,16 @@ namespace ChassisCAM.Core.GCodeGen {
 
             // Create arc, the fourth point being the midpoint of the arc or starting point
             // if its a circle.
-            Arc3 arc = new (newToolingStPt, ip1, ip2, firstToolingEntryPt);
+            FCArc3 fcArc2 = new (newToolingStPt, ip1, ip2, firstToolingEntryPt, toolingSegmentsList[0].Vec0);
             if (Utils.IsCircle (toolingSegmentsList[0].Curve)) {
-               modifiedSegmentsList.Add (new (arc, toolingSegmentsList[0].Vec0, toolingSegmentsList[0].Vec0));
+               modifiedSegmentsList.Add (new (fcArc2, toolingSegmentsList[0].Vec0, toolingSegmentsList[0].Vec0));
                modifiedSegmentsList.Add (toolingSegmentsList[0]);
                return modifiedSegmentsList;
             } else {
                List<Point3> internalPoints = [];
                internalPoints.Add (Geom.GetMidPoint (toolingSegmentsList[0].Curve, apn));
                var splitCurves = Geom.SplitCurve (toolingSegmentsList[0].Curve, internalPoints, apn, deltaBetween: 0.0);
-               modifiedSegmentsList.Add (new (arc, toolingSegmentsList[0].Vec0, toolingSegmentsList[0].Vec0));
+               modifiedSegmentsList.Add (new (fcArc2, toolingSegmentsList[0].Vec0, toolingSegmentsList[0].Vec0));
                modifiedSegmentsList.Add (new (splitCurves[1], toolingSegmentsList[0].Vec0, toolingSegmentsList[0].Vec1));
                for (int ii = 1; ii < toolingSegmentsList.Count; ii++) modifiedSegmentsList.Add (toolingSegmentsList[ii]);
                modifiedSegmentsList.Add (new (splitCurves[0], toolingSegmentsList[0].Vec0, toolingSegmentsList[0].Vec1));
@@ -2191,19 +2273,19 @@ namespace ChassisCAM.Core.GCodeGen {
          {
             // Write all other features such as Holes, Cutouts and edge notches
             for (int ii = 0; ii < toolingSegmentsList.Count; ii++) {
-               var (Curve, startNormal, endNormal) = toolingSegmentsList[ii];
+               var (FCCurve, startNormal, endNormal) = toolingSegmentsList[ii];
                startNormal = startNormal.Normalized ();
                endNormal = endNormal.Normalized ();
-               var startPoint = Curve.Start;
-               var endPoint = Curve.End;
+               var startPoint = FCCurve.Start;
+               var endPoint = FCCurve.End;
 
                if (ii > 0) currPlaneType = Utils.GetFeatureNormalPlaneType (endNormal, GetXForm ());
 
-               if (Curve is Arc3) { // This is a 2d arc. 
+               if (FCCurve is FCArc3) { // This is a 2d arc. 
                   var arcPlaneType = Utils.GetArcPlaneType (startNormal, GetXForm ());
                   var arcFlangeType = Utils.GetArcPlaneFlangeType (startNormal, GetXForm ());
-                  (var center, _) = Geom.EvaluateCenterAndRadius (Curve as Arc3);
-                  WriteArc (Curve as Arc3, arcPlaneType, arcFlangeType, center, startPoint, endPoint, startNormal,
+                  (var center, _) = Geom.EvaluateCenterAndRadius (FCCurve as FCArc3);
+                  WriteArc (FCCurve as FCArc3, arcPlaneType, arcFlangeType, center, startPoint, endPoint, startNormal,
                      toolingItem.Name);
                } else WriteLineSeg (startPoint, endPoint, startNormal, endNormal, currPlaneType, previousPlaneType,
                   Utils.GetFlangeType (toolingItem, new ()), toolingItem.Name, relativeCoords: relativeCoords);
@@ -2224,8 +2306,8 @@ namespace ChassisCAM.Core.GCodeGen {
       /// any other kind is encountered</exception>
       static EToolingShape GetToolingShapeKind (Tooling toolingItem) {
          EToolingShape shape = EToolingShape.HoleShape;
-         Curve3 firstCurve = toolingItem.Segs.First ().Curve;
-         if (firstCurve as Arc3 != null) {
+         FCCurve3 firstCurve = toolingItem.Segs.First ().Curve;
+         if (firstCurve as FCArc3 != null) {
             if (Utils.IsCircle (firstCurve))
                shape = EToolingShape.Circle;
          } else if (toolingItem.Kind == EKind.Notch) shape = EToolingShape.Notch;
@@ -2370,9 +2452,9 @@ namespace ChassisCAM.Core.GCodeGen {
          var mcMinPt = GCodeGenerator.XfmToMachine (this, minPt);
          var mcMaxPt = GCodeGenerator.XfmToMachine (this, maxPt);
          double toolingLen;
-         if (segments.Count == 2 && segments[1].Curve is Arc3) {
-            Arc3 arc = segments[1].Curve as Arc3;
-            if (IsCircle (arc))
+         if (segments.Count == 2 && segments[1].Curve is FCArc3) {
+            FCArc3 fcArc = segments[1].Curve as FCArc3;
+            if (IsCircle (fcArc))
                toolingLen = Utils.GetToolingLength (segments, startIndex, endIndex, leadIn: true);
             else
                toolingLen = Utils.GetToolingLength (segments, startIndex, endIndex, leadIn: false);
@@ -2397,7 +2479,7 @@ namespace ChassisCAM.Core.GCodeGen {
       void CalibrateForCircle (Tooling toolingItem, Tooling prevToolingItem) {
          if (toolingItem.IsCircle ()) {
             //var bnd = Process.Workpiece.Bound;
-            var evalValue = Geom.EvaluateCenterAndRadius (toolingItem.Segs.ToList ()[0].Curve as Arc3);
+            var evalValue = Geom.EvaluateCenterAndRadius (toolingItem.Segs.ToList ()[0].Curve as FCArc3);
             Point3 arcMcCoordsCenter;
             if (prevToolingItem != null) arcMcCoordsCenter = XfmToMachine (evalValue.Item1);
             else arcMcCoordsCenter = XfmToMachine (evalValue.Item1);

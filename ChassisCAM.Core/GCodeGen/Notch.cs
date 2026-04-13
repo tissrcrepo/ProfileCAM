@@ -399,15 +399,15 @@ namespace ChassisCAM.Core.GCodeGen {
       public static void SplitExtremeSegmentsOnFlangeToFlex (ref List<ToolingSegment> segs) {
          int idx = 0;
          int count = 1;
-         List<Curve3> crvs;
+         List<FCCurve3> fcCrvs;
          while (count < 2) {
             if ((Utils.IsToolingOnFlex (segs[idx]) || (segs.Count > 1 && Utils.IsToolingOnFlex (segs[1]))) && segs[idx].Curve.Length.SGT (10.0)) {
                var firstSegEndPt = Geom.GetPointAtLengthFromStart (segs[idx].Curve, segs[idx].Vec0, segs[idx].Curve.Length - 2.0);
                List<Point3> intPts = [firstSegEndPt];
-               crvs = Geom.SplitCurve (segs[idx].Curve, intPts, segs[idx].Vec0);
-               if (crvs.Count == 2) {
-                  var ts1 = Geom.CreateToolingSegmentForCurve (segs[idx], crvs[0]);
-                  var ts2 = Geom.CreateToolingSegmentForCurve (segs[idx], crvs[1]);
+               fcCrvs = Geom.SplitCurve (segs[idx].Curve, intPts, segs[idx].Vec0);
+               if (fcCrvs.Count == 2) {
+                  var ts1 = Geom.CreateToolingSegmentForCurve (segs[idx], fcCrvs[0]);
+                  var ts2 = Geom.CreateToolingSegmentForCurve (segs[idx], fcCrvs[1]);
                   List<ToolingSegment> tss = [ts1, ts2];
                   segs.RemoveAt (idx);
                   segs.InsertRange (idx, tss);
@@ -416,10 +416,10 @@ namespace ChassisCAM.Core.GCodeGen {
             if ((Utils.IsToolingOnFlex (segs[idx]) || (segs.Count >= 2 && Utils.IsToolingOnFlex (segs[^2]))) && segs[idx].Curve.Length.SGT (10.0)) {
                var lastSegStartPoint = Geom.GetPointAtLengthFromStart (segs[idx].Curve, segs[idx].Vec0, 2.0);
                List<Point3> intPts = [lastSegStartPoint];
-               crvs = Geom.SplitCurve (segs[idx].Curve, intPts, segs[idx].Vec0);
-               if (crvs.Count == 2) {
-                  var ts1 = Geom.CreateToolingSegmentForCurve (segs[idx], crvs[0]);
-                  var ts2 = Geom.CreateToolingSegmentForCurve (segs[idx], crvs[1]);
+               fcCrvs = Geom.SplitCurve (segs[idx].Curve, intPts, segs[idx].Vec0);
+               if (fcCrvs.Count == 2) {
+                  var ts1 = Geom.CreateToolingSegmentForCurve (segs[idx], fcCrvs[0]);
+                  var ts2 = Geom.CreateToolingSegmentForCurve (segs[idx], fcCrvs[1]);
                   List<ToolingSegment> tss = [ts1, ts2];
                   segs.RemoveAt (idx);
                   segs.InsertRange (idx, tss);
@@ -1651,7 +1651,7 @@ namespace ChassisCAM.Core.GCodeGen {
                         isFromWebFlange = false;
 
                      // ** Reference Tooling Segment is the first one to machine from n1 to nMid1
-                     var startTS = new ToolingSegment (new Line3 (n1, nMid1), notchApproachEndNormal, notchApproachEndNormal);
+                     var startTS = new ToolingSegment (new FCLine3 (n1, nMid1), notchApproachEndNormal, notchApproachEndNormal);
                      mGCodeGen.InitializeNotchToolingBlock (mToolingItem, prevToolingItem: null, pts, notchApproachStNormal,
                         mXStart, mXPartition, mXEnd, isFlexCut: false, ii == mNotchSequences.Count - 1, startTS, nextTs: null,
                         isValidNotch: true,
@@ -1690,7 +1690,7 @@ namespace ChassisCAM.Core.GCodeGen {
                               Utils.GetArcPlaneFlangeType (notchApproachEndNormal.Normalized (),
                               mGCodeGen.GetXForm ()), mToolingItem.Name, relativeCoords: relCoords, refStPoint: prevAbsToolPosition);
 
-                           PreviousToolingSegment = new ((new Line3 (notchEntry.Item1, flangeEnd), notchApproachStNormal, notchApproachEndNormal));
+                           PreviousToolingSegment = new ((new FCLine3 (notchEntry.Item1, flangeEnd), notchApproachStNormal, notchApproachEndNormal));
                         }
                         mGCodeGen.DisableMachiningDirective ();
                         mGCodeGen.WriteLineStatement (mGCodeGen.NotchCutEndToken);
@@ -1742,7 +1742,7 @@ namespace ChassisCAM.Core.GCodeGen {
                         isFromWebFlange = false;
 
                      // Reference Tooling Segment is the first one to machine from n2 to nMid2
-                     startTS = new ToolingSegment (new Line3 (n2, nMid2), notchApproachEndNormal, notchApproachEndNormal);
+                     startTS = new ToolingSegment (new FCLine3 (n2, nMid2), notchApproachEndNormal, notchApproachEndNormal);
                      mGCodeGen.InitializeNotchToolingBlock (mToolingItem, prevToolingItem: null, pts, notchApproachStNormal,
                         mXStart, mXPartition, mXEnd, isFlexCut: false, ii == mNotchSequences.Count - 1, startTS, nextTs: null,
                         isValidNotch: true,
@@ -1774,7 +1774,7 @@ namespace ChassisCAM.Core.GCodeGen {
                               Utils.GetArcPlaneFlangeType (notchApproachEndNormal.Normalized (),
                               mGCodeGen.GetXForm ()), mToolingItem.Name, relativeCoords: relCoords, refStPoint: prevAbsToolPosition);
 
-                           PreviousToolingSegment = new ((new Line3 (nMid2, mSegments[mNotchIndices.segIndexAtWJTApproach].Curve.End),
+                           PreviousToolingSegment = new ((new FCLine3 (nMid2, mSegments[mNotchIndices.segIndexAtWJTApproach].Curve.End),
                               notchApproachStNormal, notchApproachStNormal));
                         }
 
@@ -1816,7 +1816,7 @@ namespace ChassisCAM.Core.GCodeGen {
                               Utils.GetArcPlaneFlangeType (notchApproachEndNormal.Normalized (),
                               mGCodeGen.GetXForm ()), mToolingItem.Name, relativeCoords: true, refStPoint: prevAbsToolPosition);
 
-                           PreviousToolingSegment = new ((new Line3 (PreviousToolingSegment.Value.Curve.End,
+                           PreviousToolingSegment = new ((new FCLine3 (PreviousToolingSegment.Value.Curve.End,
                               mSegments[mNotchIndices.segIndexAtWJTApproach].Curve.End), notchApproachStNormal, notchApproachEndNormal));
                         }
 
@@ -2210,7 +2210,7 @@ namespace ChassisCAM.Core.GCodeGen {
                         }
                      }
 
-                     var refTS = new ToolingSegment (new Line3 (nMid2, mSegments[mNotchIndices.segIndexAtWJTApproach].Curve.End), notchApproachEndNormal, notchApproachEndNormal);
+                     var refTS = new ToolingSegment (new FCLine3 (nMid2, mSegments[mNotchIndices.segIndexAtWJTApproach].Curve.End), notchApproachEndNormal, notchApproachEndNormal);
                      titleComment = titleComment + "\n" + GCodeGenerator.GetGCodeComment ("Notch: Move to Mid2 towards machining again the rest of the tooling segment");
                      mGCodeGen.InitializeNotchToolingBlock (mToolingItem, prevToolingItem: null, pts, notchApproachStNormal,
                         mXStart, mXPartition, mXEnd, isFlexCut: false, ii == mNotchSequences.Count - 1, refTS, nextTs: null,

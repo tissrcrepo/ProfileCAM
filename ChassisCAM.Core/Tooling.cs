@@ -19,37 +19,37 @@ public enum ECutKind {
    YPos, YNeg, Top2YPos, YPosFlex, YNegFlex, None
 };
 public struct ToolingSegment {
-   Curve3 mCurve;
+   FCCurve3 mCurve;
    Vector3 mVec0;
    Vector3 mVec1;
    bool mIsValid = true;
-   public ToolingSegment ((Curve3, Vector3, Vector3) vtSeg, bool cloneCrv = false) {
+   public ToolingSegment ((FCCurve3, Vector3, Vector3) vtSeg, bool cloneCrv = false) {
       if (cloneCrv)
-         mCurve = Geom.CloneCurve (vtSeg.Item1, vtSeg.Item2);
+         mCurve = vtSeg.Item1.Clone ();
       else mCurve = vtSeg.Item1;
       mVec0 = vtSeg.Item2;
       mVec1 = vtSeg.Item3;
       NotchSectionType = NotchSectionType.None;
    }
-   public ToolingSegment ((Curve3, Vector3, Vector3, NotchSectionType) vtSeg, bool cloneCrv = false) {
+   public ToolingSegment ((FCCurve3, Vector3, Vector3, NotchSectionType) vtSeg, bool cloneCrv = false) {
       if (cloneCrv)
-         mCurve = Geom.CloneCurve (vtSeg.Item1, vtSeg.Item2);
+         mCurve = vtSeg.Item1.Clone ();
       else mCurve = vtSeg.Item1;
       mVec0 = vtSeg.Item2;
       mVec1 = vtSeg.Item3;
       NotchSectionType = vtSeg.Item4;
    }
-   public ToolingSegment (Curve3 crv, Vector3 vec0, Vector3 vec1, bool cloneCrv = false) {
+   public ToolingSegment (FCCurve3 crv, Vector3 vec0, Vector3 vec1, bool cloneCrv = false) {
       if (cloneCrv)
-         mCurve = Geom.CloneCurve (crv, vec0);
+         mCurve = crv.Clone ();
       else mCurve = crv;
       mVec0 = vec0;
       mVec1 = vec1;
       NotchSectionType = NotchSectionType.None;
    }
-   public ToolingSegment (Curve3 crv, Vector3 vec0, Vector3 vec1, NotchSectionType nsectionType, bool cloneCrv = false) {
+   public ToolingSegment (FCCurve3 crv, Vector3 vec0, Vector3 vec1, NotchSectionType nsectionType, bool cloneCrv = false) {
       if (cloneCrv)
-         mCurve = Geom.CloneCurve (crv, vec0);
+         mCurve = crv.Clone ();
       else mCurve = crv;
       mVec0 = vec0;
       mVec1 = vec1;
@@ -57,18 +57,18 @@ public struct ToolingSegment {
    }
    public ToolingSegment (ToolingSegment rhs, bool cloneCrv = false) {
       if (cloneCrv)
-         mCurve = Geom.CloneCurve (rhs.mCurve, rhs.mVec0);
+         mCurve = rhs.Curve.Clone ();
       else mCurve = rhs.Curve;
       mVec0 = rhs.mVec0;
       mVec1 = rhs.mVec1;
       NotchSectionType = rhs.NotchSectionType;
    }
-   public readonly void Deconstruct (out Curve3 curve, out Vector3 vec0, out Vector3 vec1) {
+   public readonly void Deconstruct (out FCCurve3 curve, out Vector3 vec0, out Vector3 vec1) {
       curve = this.Curve;
       vec0 = this.Vec0;
       vec1 = this.Vec1;
    }
-   public Curve3 Curve { readonly get => mCurve; set => mCurve = value; }
+   public FCCurve3 Curve { readonly get => mCurve; set => mCurve = value; }
    public Vector3 Vec0 { readonly get => mVec0; set => mVec0 = value; }
    public Vector3 Vec1 { readonly get => mVec1; set => mVec1 = value; }
    public bool IsValid { readonly get => mIsValid; set => mIsValid = value; }
@@ -78,8 +78,7 @@ public struct ToolingSegment {
    // Alternative implementation using object initializer with your existing constructor
    public readonly ToolingSegment Clone () {
       return new ToolingSegment (
-          (Geom.CloneCurve (this.mCurve, this.mVec0), this.mVec0, this.mVec1, this.NotchSectionType
-      )) {
+          (this.mCurve.Clone (), this.mVec0, this.mVec1, this.NotchSectionType)) {
          mIsValid = this.mIsValid
       };
    }
@@ -103,7 +102,7 @@ public class Tooling {
          ProfileKind = this.ProfileKind,
          CutoutKind = this.CutoutKind,
          mPerimeter = this.mPerimeter,
-         mSegs = [.. this.mSegs.Select (seg => new ToolingSegment (Geom.CloneCurve (seg.Curve, seg.Vec0), seg.Vec0, seg.Vec1))],
+         mSegs = [.. this.mSegs.Select (seg => new ToolingSegment (seg.Curve.Clone (), seg.Vec0, seg.Vec1))],
          mBound3 = this.mBound3,
          mName = this.mName,
          IsSingleHead1 = this.IsSingleHead1,
@@ -338,7 +337,7 @@ public class Tooling {
             first = false;
          }
 
-         if (Curve is Arc3 arc) {
+         if (Curve is FCArc3 arc) {
             var pts = arc.Discretize (0.1).ToList ();
             for (int i = 1; i < pts.Count; i++)
                pvs.Add ((new (pts[i], Vec1), i == pts.Count - 1));
@@ -495,7 +494,7 @@ public class Tooling {
                if (prevpvb != null) {
                   if (pva.DistTo (prevpvb.Value) < mNotchJoinableLengthToClose
                       && pva.DistTo (prevpvb.Value) > 1.0) {
-                     var line = new Line3 (prevpvb.Value.Pt, pva.Pt);
+                     var line = new FCLine3 (prevpvb.Value.Pt, pva.Pt);
                      yield return new (line, prevpvb.Value.Vec, pva.Vec);
                   }
                }
@@ -505,7 +504,7 @@ public class Tooling {
                   // it to an Arc3 (all the normals along this curve are pointing in the same direction)
                   PointVec pvm1 = Project (ent, seg.GetPointAt (0.5)),
                            pvm2 = Project (ent, seg.GetPointAt (0.75));
-                  var arc = new Arc3 (pva.Pt, pvm1.Pt, pvm2.Pt, pvb.Pt);
+                  var arc = new FCArc3 (pva.Pt, pvm1.Pt, pvm2.Pt, pvb.Pt, pvm1.Vec);
                   prevpvb = pva; prevpvb = pvb;
                   yield return new (arc, pva.Vec, pvb.Vec);
                } else {
@@ -519,7 +518,7 @@ public class Tooling {
                      double start = i / (double)steps, end = (i + 1) / (double)steps;
                      PointVec ps = Project (ent, seg.GetPointAt (start)),
                               pe = Project (ent, seg.GetPointAt (end));
-                     var line = new Line3 (ps.Pt, pe.Pt);
+                     var line = new FCLine3 (ps.Pt, pe.Pt);
                      prevpvb = pva; prevpvb = pvb;
                      yield return new (line, ps.Vec, pe.Vec);
                   }
@@ -567,7 +566,7 @@ public class Tooling {
       var segsList = Segs.ToList ();
 
       // Assuming that circle wil be the only segment
-      return segsList[0].Curve is Arc3 arc && arc.Start.EQ (arc.End);
+      return segsList[0].Curve is FCArc3 arc && arc.Start.EQ (arc.End);
    }
 
    // Any feature other than Mark, that has a closed contour, 
