@@ -17,3 +17,7 @@ output/
 **/output/*
 */output/
 /output
+
+# NuGet packages (VERY IMPORTANT)
+packages/
+**/packages/

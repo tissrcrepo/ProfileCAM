@@ -66,7 +66,7 @@ public partial class App : Application {
          Directory.CreateDirectory (appFolderPath);
 
          // Create the full path for the log file
-         mLogFilePath = Path.Combine (appFolderPath, "ChassisCAM_StartupLog.txt");
+         mLogFilePath = Path.Combine (appFolderPath, "ProfileCAM_StartupLog.txt");
 
          // Write a header to a new log file each time the app starts
          File.WriteAllText (mLogFilePath, $"--- ProfileCAM Startup Log [{DateTime.Now}] ---\n");
