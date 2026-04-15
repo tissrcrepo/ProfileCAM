@@ -1,0 +1,356 @@
+﻿<Window x:Class="ChassisCAM.Presentation.SettingsDlg"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:ChassisCAM.Presentation"
+        KeyDown="OnKeyDownHandler"
+        mc:Ignorable="d" Background="White" 
+        MinHeight="400" MinWidth="410"
+        Title="Settings" SizeToContent="WidthAndHeight">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="RestrictedSettingsVisibilityConverter" />
+
+        <Style TargetType="Label">
+            <Setter Property="HorizontalContentAlignment" Value="Right"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="2 0"/>
+        </Style>
+        <Style TargetType="Label" x:Key="Unit">
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style TargetType="TextBox">
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Height" Value="22"/>
+        </Style>
+        <Style TargetType="CheckBox">
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style TargetType="ListBoxItem">
+        </Style>
+        <Style TargetType="ComboBox">
+            <Setter Property="Background" Value="Red"/>
+            <Setter Property="Height" Value="25"/>
+        </Style>
+        <Style TargetType="ComboBoxItem">
+            <Setter Property="Background" Value="LightBlue"/>
+            <Setter Property="Height" Value="25"/>
+        </Style>
+        <Style TargetType="RadioButton">
+            <Setter Property="Height" Value="18"/>
+        </Style>
+    </Window.Resources>
+
+    <DockPanel>
+        <Grid Background="White" DockPanel.Dock="Bottom">
+            <Button Name="btnOK" Margin="10 5" HorizontalAlignment="Right"
+                     IsDefault="True" Background="#E0E0E0" Height="22" Width="80">OK</Button>
+        </Grid>
+        <TabControl Margin="5" Background="#E0E0E0" Grid.IsSharedSizeScope="True">
+            <TabItem Header="G Code Gen">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition SharedSizeGroup="TabHeight" />
+                        </Grid.RowDefinitions>
+                        <StackPanel>
+                            <Grid Margin="5">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="62*"/>
+                                    <ColumnDefinition Width="125*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition />
+                                    <RowDefinition />
+                                    <RowDefinition />
+                                    <RowDefinition />
+                                    <RowDefinition />
+                                    <RowDefinition />
+                                    <RowDefinition />
+                                    <RowDefinition />
+                                    <RowDefinition />
+                                    <RowDefinition />
+                                    <RowDefinition />
+                                    <RowDefinition />
+                                    <RowDefinition />
+                                    <RowDefinition />
+                                    <RowDefinition />
+                                    <RowDefinition />
+                                    <RowDefinition />
+                                    <RowDefinition />
+                                    <!--<RowDefinition />-->
+                                </Grid.RowDefinitions>
+
+                                <Label Grid.Row="0" Margin="2,0,2,0">Flex Cutting Gap</Label>
+                                <TextBox Grid.Row="0" Grid.Column="1" Name="tbFlexCuttingGap" Grid.ColumnSpan="2"/>
+                                <Label Grid.Row="0" Grid.Column="2" Style="{StaticResource Unit}" Grid.ColumnSpan="2" Margin="125,0,0,0">mm</Label>
+
+                                <Label Grid.Row="1" Margin="2,0,2,0">Ping-pong</Label>
+                                <CheckBox Grid.Row="1" Grid.Column="1" Name="cbPingPong" Grid.ColumnSpan="2"></CheckBox>
+
+                                <Label Grid.Row="2" Margin="2,0,2,0">Partition Ratio</Label>
+                                <TextBox Grid.Row="2" Grid.Column="1" Name="tbPartition" Grid.ColumnSpan="2"></TextBox>
+
+                                <Label Grid.Row="3" Margin="2,0,2,0">Mark Text</Label>
+                                <TextBox Grid.Row="3" Grid.Column="1" Name="tbMarkText" Grid.ColumnSpan="2"></TextBox>
+
+                                <Label Grid.Row="4" Margin="2,0,2,0">Mark Text Height</Label>
+                                <TextBox Grid.Row="4" Grid.Column="1" Name="tbMarkTextHeight" Grid.ColumnSpan="2"></TextBox>
+
+                                <Label Grid.Row="5" Margin="0,0,1,0">Mark Text Position</Label>
+                                <StackPanel Grid.Row="5" Grid.Column="1" Orientation="Horizontal" Grid.ColumnSpan="2" Margin="0,0,0,26" Grid.RowSpan="2">
+                                    <TextBox Name="tbMarkTextPositionX" Width="40" HorizontalAlignment="Left"></TextBox>
+                                    <TextBox Name="tbMarkTextPositionY" Width="40" Margin="3 0" HorizontalAlignment="Left"></TextBox>
+                                </StackPanel>
+
+                                <Label Grid.Row="6" Margin="2,0,2,0">Mark Text Angle</Label>
+                                <ComboBox Grid.Row="6" Grid.Column="1" Name="cbMarkTextAngle" SelectedIndex="0" Grid.ColumnSpan="2" Margin="0,0,0,1"></ComboBox>
+                                <Label Grid.Row="6" Grid.Column="2" Style="{StaticResource Unit}" Grid.ColumnSpan="2" Margin="125,0,0,0">deg</Label>
+
+                                <Label Grid.Row="7" Margin="2,0,2,0">Cut Holes</Label>
+                                <CheckBox Grid.Row="7" Grid.Column="1" Name="cbCutHoles" Grid.ColumnSpan="2"></CheckBox>
+
+                                <Label Grid.Row="8" Margin="2,0,2,0">Cut Notches</Label>
+                                <CheckBox Grid.Row="8" Grid.Column="1" Name="cbCutNotches" Grid.ColumnSpan="2"></CheckBox>
+
+                                <Label Grid.Row="9" Margin="2,0,2,0">Cut Cutouts</Label>
+                                <CheckBox Grid.Row="9" Grid.Column="1" Name="cbCutCutouts" Grid.ColumnSpan="2"></CheckBox>
+
+                                <Label Grid.Row="10" Margin="2,0,2,0">Cut Marks</Label>
+                                <CheckBox Grid.Row="10" Grid.Column="1" Name="cbCutMarks" Grid.ColumnSpan="2"></CheckBox>
+
+                                <Label Grid.Row="11" Margin="2,0,2,0">Web</Label>
+                                <CheckBox Grid.Row="11" Grid.Column="1" Name="cbCutWeb" Grid.ColumnSpan="2"></CheckBox>
+
+                                <Label Grid.Row="12" Margin="2,0,2,0">Flange</Label>
+                                <CheckBox Grid.Row="12" Grid.Column="1" Name="cbCutFlange" Grid.ColumnSpan="2"></CheckBox>
+
+                                <Label Grid.Row="13" VerticalAlignment="Top" Margin="2,0,2,0">Part Configuration</Label>
+                                <StackPanel Grid.Row="13" Grid.Column="1" Margin="0,7,0,25" Grid.ColumnSpan="2" Grid.RowSpan="2">
+                                    <RadioButton GroupName="PartConfig" Name="rbLHComponent">LH Component</RadioButton>
+                                    <RadioButton GroupName="PartConfig" Name="rbRHComponent">RH Component</RadioButton>
+                                </StackPanel>
+
+                                <Label Grid.Row="14" Margin="2,0,2,0">Approach Length</Label>
+                                <TextBox Grid.Row="14" Grid.Column="1" Name="tbApproachLength" Grid.ColumnSpan="2"></TextBox>
+                                <Label Grid.Row="14" Grid.Column="2" Style="{StaticResource Unit}" Grid.ColumnSpan="2" Margin="125,0,0,0">mm</Label>
+
+                                <Label Grid.Row="15" Margin="2,0,2,0">Notch Approach Length</Label>
+                                <TextBox Grid.Row="15" Grid.Column="1" Name="tbNotchApproachLength" Grid.ColumnSpan="2"></TextBox>
+                                <Label Grid.Row="15" Grid.Column="2" Style="{StaticResource Unit}" Grid.ColumnSpan="2" Margin="125,0,0,0">mm</Label>
+
+                                <Label Grid.Row="16" Margin="2,0,2,0">Notch Wire Joint Distance</Label>
+                                <TextBox Grid.Row="16" Grid.Column="1" Name="tbNotchWireJointDistance" Grid.ColumnSpan="2"></TextBox>
+                                <Label Grid.Row="16" Grid.Column="2" Style="{StaticResource Unit}" Grid.ColumnSpan="2" Margin="125,0,0,0">mm</Label>
+
+                                <Label Grid.Row="17" Margin="2,0,2,0">Min Notch Length Threshold</Label>
+                                <TextBox Grid.Row="17" Grid.Column="1" Name="tbMinNotchLengthThreshold" Grid.ColumnSpan="2"></TextBox>
+                                <Label Grid.Row="17" Grid.Column="2" Style="{StaticResource Unit}" Grid.ColumnSpan="2" Margin="125,0,0,0">mm</Label>
+
+                                <Label Grid.Row="18" VerticalAlignment="Top" Visibility="Hidden">Makespan Optimization</Label>
+                                <CheckBox Grid.Row="18" Grid.Column="1" Name="cbMakespanOptim" Visibility="Hidden"></CheckBox>
+                            </Grid>
+                        </StackPanel>
+                    </Grid>
+                </ScrollViewer>
+            </TabItem>
+            <TabItem Header="Machine">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition SharedSizeGroup="TabHeight" />
+                    </Grid.RowDefinitions>
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition />
+                                <RowDefinition />
+                                <RowDefinition />
+                                <RowDefinition />
+                                <RowDefinition />
+                                <RowDefinition />
+                            </Grid.RowDefinitions>
+                            <Label Grid.Row="0" VerticalAlignment="Top" VerticalContentAlignment="Top">Head Configuration</Label>
+                            <StackPanel Grid.Row="0" Grid.Column="1" Margin="0 7 0 0">
+                                <RadioButton GroupName="Heads" Name="rbBoth">Both</RadioButton>
+                                <RadioButton GroupName="Heads" Name="rbLeft">Head-1</RadioButton>
+                                <RadioButton GroupName="Heads" Name="rbRight">Head-2</RadioButton>
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </Grid>
+            </TabItem>
+            <TabItem Header="General">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition SharedSizeGroup="TabHeight" />
+                    </Grid.RowDefinitions>
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition />
+                                <RowDefinition />
+                                <RowDefinition />
+                                <RowDefinition />
+                                <RowDefinition />
+                            </Grid.RowDefinitions>
+
+                            <Label Grid.Row="0">Input Directory W: Maps To</Label>
+                            <TextBox Name="tbInputDirectoryWPath" Grid.Row="0" Grid.Column="1" IsReadOnly="True"/>
+                            <!--<Button Name="btnSelIpDir" Grid.Row="0" Grid.Column="2" Content="Browse" HorizontalAlignment="Left"
+                                Width="60" Height="20" Margin="5 0" Click="OnInputFolderSelect"/>-->
+
+                            <Label Grid.Row="1">Output Directory</Label>
+                            <TextBox Name="tbDirectoryPath" Grid.Row="1" Grid.Column="1" IsReadOnly="False"/>
+                            <Button Name="btnSelOpDir" Grid.Row="1" Grid.Column="2" Content="Browse" HorizontalAlignment="Left"
+                                    Width="60" Height="20" Margin="5 0" Click="OnOutputFolderSelect"/>
+
+                            <Label Grid.Row="2">Simulation Step Length</Label>
+                            <TextBox Grid.Row="2" Grid.Column="1" Name="tbStepLength"></TextBox>
+
+                            <Label Grid.Row="3">Show Tooling Names</Label>
+                            <CheckBox Grid.Row="3" Grid.Column="1" Name="cbShowTlgNames"></CheckBox>
+
+                            <Label Grid.Row="4">Show Tooling Extents</Label>
+                            <CheckBox Grid.Row="4" Grid.Column="1" Name="cbShowTlgExtents"></CheckBox>
+
+                        </Grid>
+                    </StackPanel>
+                </Grid>
+            </TabItem>
+            <TabItem Header="Restricted Settings"
+                Visibility="{Binding IsRestrictedSettingsVisible, Converter={StaticResource RestrictedSettingsVisibilityConverter}}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition SharedSizeGroup="TabHeight" />
+                        </Grid.RowDefinitions>
+                        <StackPanel>
+                            <Grid Margin="5">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition />
+                                    <RowDefinition />
+                                    <RowDefinition />
+                                    <RowDefinition />
+                                    <RowDefinition />
+                                    <RowDefinition />
+                                    <RowDefinition />
+                                    <RowDefinition />
+                                    <RowDefinition />
+                                    <RowDefinition />
+                                    <RowDefinition />
+                                    <RowDefinition />
+                                    <RowDefinition />
+                                    <RowDefinition />
+                                    <RowDefinition />
+                                    <RowDefinition />
+                                    <RowDefinition />
+                                </Grid.RowDefinitions>
+
+                                <Label Grid.Row="0">Standoff</Label>
+                                <TextBox Grid.Row="0" Grid.Column="1" Name="tbStandoff"></TextBox>
+                                <Label Grid.Row="0" Grid.Column="2" Style="{StaticResource Unit}">mm</Label>
+
+                                <Label Grid.Row="1">Min CutOut Length Threshold</Label>
+                                <TextBox Grid.Row="1" Grid.Column="1" Name="tbMinCutOutLengthThreshold"></TextBox>
+                                <Label Grid.Row="1" Grid.Column="2" Style="{StaticResource Unit}">mm</Label>
+
+                                <Label Grid.Row="2">Min Partition Length Threshold</Label>
+                                <TextBox Grid.Row="2" Grid.Column="1" Name="tbMinThresholdPart"></TextBox>
+                                <Label Grid.Row="2" Grid.Column="2" Style="{StaticResource Unit}">mm</Label>
+
+                                <Label Grid.Row="3">DIN Filename Suffix</Label>
+                                <TextBox Grid.Row="3" Grid.Column="1" Name="tbDinFilenameSuffix"></TextBox>
+
+                                <Label Grid.Row="4">Enable Multiple Pass Cut</Label>
+                                <CheckBox Grid.Row="4" Grid.Column="1" Name="chbMPC"></CheckBox>
+
+                                <Label Grid.Row="5">Max Frame Length</Label>
+                                <TextBox Grid.Row="5" Grid.Column="1" Name="tbMaxFrameLength"></TextBox>
+                                <Label Grid.Row="5" Grid.Column="2" Style="{StaticResource Unit}">mm</Label>
+
+                                <Label Grid.Row="6">Dead Band Width</Label>
+                                <TextBox Grid.Row="6" Grid.Column="1" Name="tbDeadBandWidth"></TextBox>
+                                <Label Grid.Row="6" Grid.Column="2" Style="{StaticResource Unit}">mm</Label>
+
+                                <Label Grid.Row="8">LCM Machine</Label>
+                                <ComboBox Grid.Row="8" Grid.Column="1" Name="cbLCMMachine" SelectedIndex="1"></ComboBox>
+
+                                <Label Grid.Row="9">Workpiece Options</Label>
+                                <TextBox Name="tbWPOptions" Grid.Row="9" Grid.Column="1" IsReadOnly="False"/>
+                                <Button Name="btnWPOptionsSelOpFile" Grid.Row="9" Grid.Column="2" Content="Browse" HorizontalAlignment="Left"
+                            Width="60" Height="20" Margin="5 0" Click="OnWorkpieceOptionsFileSelect"/>
+
+                                <Label Grid.Row="10" Margin="2,0,2,0">Optimize Partition</Label>
+                                <CheckBox Grid.Row="10" Grid.Column="1" Name="cbOptimize" Grid.ColumnSpan="2"></CheckBox>
+
+                                <Label Grid.Row="11" Margin="2,0,2,0" VerticalAlignment="Top" VerticalContentAlignment="Top">Optimization type</Label>
+                                <StackPanel Grid.Row="11" Grid.Column="1" Margin="1 8">
+                                    <RadioButton Name="rbDP" Content="DP Optimization"/>
+                                    <RadioButton Name="rbTime" Content="Time Optimization"/>
+                                </StackPanel>
+
+                                <Label Grid.Row="12">Least Wire Joint Length</Label>
+                                <TextBox Grid.Row="12" Grid.Column="1" Name="tbLeastWJLength">
+                                    <TextBox.ToolTip>
+                                        <ToolTip Background="#FFF0F0" BorderBrush="#FF9900" BorderThickness="1">
+                                            <StackPanel>
+                                                <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                                                    <Path Data="M12 2L1 21h22L12 2zm0 4h0v10h0V6zm0 12h0v2h0v-2z" 
+                                                            Fill="#FF9900" Stretch="Uniform" Width="16" Height="16" 
+                                                            Margin="0,0,5,0"/>
+                                                    <TextBlock FontWeight="Bold" Foreground="#CC3300">WARNING</TextBlock>
+                                                </StackPanel>
+                                                <TextBlock TextWrapping="Wrap" MaxWidth="250" Margin="5,0,5,5">
+                                                    <Run FontWeight="SemiBold">Smaller Wire Joint Length</Run>
+                                                    <Run> might yield unexpected results.</Run>
+                                                </TextBlock>
+                                                <TextBlock TextWrapping="Wrap" MaxWidth="250" Margin="5,0,5,5">
+                                                    The safe limit is from 0.25 mm to 5 mm.
+                                                </TextBlock>
+                                                <TextBlock TextWrapping="Wrap" MaxWidth="250" 
+                                                    FontWeight="Bold" Foreground="#CC3300" Margin="5,0,5,0">
+                                                        USE THIS RESPONSIBLY.
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </ToolTip>
+                                    </TextBox.ToolTip>
+                                </TextBox>
+                                <Label Grid.Row="12" Grid.Column="2" Style="{StaticResource Unit}">mm</Label>
+
+                                <Label Grid.Row="13" Margin="2,0,2,0">Slot with Wire joints only</Label>
+                                <CheckBox Grid.Row="13" Grid.Column="1" Name="cbOnlyWJTSlot" Grid.ColumnSpan="2"></CheckBox>
+
+                                <Label Grid.Row="14" Margin="2,0,2,0">Dual flange cutout notches only</Label>
+                                <CheckBox Grid.Row="14" Grid.Column="1" Name="cbDualFlangeCutoutNotch" Grid.ColumnSpan="2"></CheckBox>
+
+                                <Label Grid.Row="15">Lead-in approach arc angle</Label>
+                                <TextBox Grid.Row="15" Grid.Column="1" Name="tbLeadInApproachArcAngle"></TextBox>
+                                <Label Grid.Row="15" Grid.Column="2" Style="{StaticResource Unit}">deg</Label>
+                                
+                            </Grid>
+                        </StackPanel>
+                    </Grid>
+                </ScrollViewer>
+            </TabItem>
+        </TabControl>
+    </DockPanel>
+</Window>

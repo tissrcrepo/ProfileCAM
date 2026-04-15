@@ -1,0 +1,43 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+	<TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <BaseOutputPath>C:\FluxSDK\Bin</BaseOutputPath>	
+	<UseWPF>true</UseWPF>
+	
+	<OutDir>C:\FluxSDK\Bin</OutDir>
+	  
+	<Company>TeckinSoft</Company>
+
+	<UseCommonOutputDirectory>true</UseCommonOutputDirectory>
+	<BaseOutputPath>$(SolutionDir)\output\$(MSBuildProjectName)\</BaseOutputPath>
+	<PackageOutputPath>$(SolutionDir)\output\$(MSBuildProjectName)\Packages</PackageOutputPath>
+	<Platforms>x64</Platforms>
+	<Configurations>Debug;Release;TestRelease</Configurations>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="obj\**" />
+    <EmbeddedResource Remove="obj\**" />
+    <None Remove="obj\**" />
+    <Page Remove="obj\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\FChassis\ChassisCAM.csproj" />
+  </ItemGroup>
+
+	<ItemGroup>
+		<Reference Include="Flux.API">
+			<HintPath>C:\FluxSDK\Bin\Flux.API.dll</HintPath>
+		</Reference>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <PackageReference Update="CommunityToolkit.Mvvm" Version="8.4.0" />
+	</ItemGroup>
+
+</Project>
