@@ -1,14 +1,14 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<TargetFramework>net8.0-windows</TargetFramework>
-		<AssemblyName>ChassisCAM.Input</AssemblyName>
-		<RootNamespace>ChassisCAM.Input</RootNamespace>
+		<TargetFramework>net8.0-windows8.0</TargetFramework>
+		<AssemblyName>ProfileCAM.Input</AssemblyName>
+		<RootNamespace>ProfileCAM.Input</RootNamespace>
 		<LangVersion>latest</LangVersion>
 		<Nullable>disable</Nullable>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-		<DocumentationFile>$(OutDir)ChassisCAM.Input.xml</DocumentationFile>
+		<DocumentationFile>$(OutDir)ProfileCAM.Input.xml</DocumentationFile>
 		<DefineConstants>DEBUG_ROUND3</DefineConstants>
 		<Configurations>Debug;Release;TestRelease</Configurations>
 		<PlatformTarget>x64</PlatformTarget>
@@ -36,14 +36,14 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<Reference Include="ChassisCAM.Core">
-		  <HintPath>..\..\..\..\..\..\..\FluxSDK\Bin\ChassisCAM.Core.dll</HintPath>
-		</Reference>
 		<Reference Include="Flux.API">
 			<HintPath>c:\FluxSDK\Bin\Flux.API.dll</HintPath>
 		</Reference>
 		<Reference Include="Flux.Base">
 			<HintPath>c:\FluxSDK\Bin\Flux.Base.dll</HintPath>
+		</Reference>
+		<Reference Include="ProfileCAM.Core">
+		  <HintPath>..\..\..\..\..\..\..\FluxSDK\Bin\ProfileCAM.Core.dll</HintPath>
 		</Reference>
 	</ItemGroup>
 

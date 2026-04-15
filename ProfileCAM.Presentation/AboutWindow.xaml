@@ -1,7 +1,7 @@
-﻿<Window x:Class="ChassisCAM.Presentation.AboutWindow"
+﻿<Window x:Class="ProfileCAM.Presentation.AboutWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="About ChassisCAM.Presentation" Height="200" Width="300" WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
+        Title="About ProfileCAM.Presentation" Height="200" Width="300" WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
     <Grid>
         <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="10">
             <TextBlock Text="ProfileCAM" FontSize="16" FontWeight="Bold" HorizontalAlignment="Center"/>

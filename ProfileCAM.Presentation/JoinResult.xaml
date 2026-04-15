@@ -1,7 +1,7 @@
-﻿<Window x:Class="ChassisCAM.Presentation.JoinResult"
+﻿<Window x:Class="ProfileCAM.Presentation.JoinResult"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:vm="clr-namespace:ChassisCAM.Presentation.ViewModel"
+        xmlns:vm="clr-namespace:ProfileCAM.Presentation.ViewModel"
         Title="Join Result" Height="100" Width="350"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize" WindowStyle="ToolWindow">
@@ -23,7 +23,7 @@
 </Window>
 
 
-<!--<Window x:Class="ChassisCAM.Presentation.ViewModel.JoinResult"
+<!--<Window x:Class="ProfileCAM.Presentation.ViewModel.JoinResult"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Join Result" Height="100" Width="350" WindowStartupLocation="CenterScreen"

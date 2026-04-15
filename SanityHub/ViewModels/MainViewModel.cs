@@ -1,8 +1,8 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using ChassisCAM.Core;
-using ChassisCAM.Core.GCodeGen;
-using ChassisCAM.Core.Processes;
+using ProfileCAM.Core;
+using ProfileCAM.Core.GCodeGen;
+using ProfileCAM.Core.Processes;
 using Flux.API;
 using Microsoft.Win32;
 using SanityHub.Models;
@@ -50,7 +50,7 @@ namespace SanityHub {
       [RelayCommand]
       public void RunAll () {
          // Add apppropriate folder path 
-         string folderPath = "C:\\D drive\\Projects\\ChassisCAM\\Main ChassisCAM\\ChassisCAM\\TestData\\SettingJSONs";
+         string folderPath = "C:\\D drive\\Projects\\ProfileCAM\\Main ProfileCAM\\ProfileCAM\\TestData\\SettingJSONs";
          foreach (string filePath in Directory.GetFiles (folderPath, "*.json")) {
             if (!File.Exists (filePath)) continue;
             SelectedSetting = Path.GetFileNameWithoutExtension (filePath);

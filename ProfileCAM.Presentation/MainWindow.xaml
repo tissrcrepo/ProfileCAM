@@ -1,14 +1,14 @@
-﻿<Window x:Class="ChassisCAM.Presentation.MainWindow"
+﻿<Window x:Class="ProfileCAM.Presentation.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:ChassisCAM.Presentation"
-        xmlns:converters="clr-namespace:ChassisCAM.Presentation.VisibilityConverters"
+        xmlns:local="clr-namespace:ProfileCAM.Presentation"
+        xmlns:converters="clr-namespace:ProfileCAM.Presentation.VisibilityConverters"
         mc:Ignorable="d"
         WindowState="Maximized"
         Title="{Binding WindowTitle, RelativeSource={RelativeSource Self}}"
-        Icon="Resources/ChassisCAM.ico" Height="450" Width="800" 
+        Icon="Resources/ProfileCAM.ico" Height="450" Width="800" 
         Loaded="OnWindowLoaded">
     <Window.Resources>
         <converters:DbgToVisibilityConverter x:Key="DebugModeVisibilityConverter" />

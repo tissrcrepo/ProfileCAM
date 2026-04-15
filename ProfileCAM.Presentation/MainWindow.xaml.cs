@@ -338,9 +338,21 @@ public partial class MainWindow : Window, INotifyPropertyChanged {
    #region Event handlers
    void TriggerRedraw ()
       => Dispatcher.Invoke (() => mOverlay?.Redraw ());
-   void ZoomWithExtents (Bound3 bound) => Dispatcher.Invoke (() => mScene.Bound3 = bound);
-   void OnSimulationFinished ()
-      => mProcessSimulator.SimulationStatus = ProcessSimulator.ESimulationStatus.NotRunning;
+   void ZoomWithExtents (Bound3 bound) {
+      Dispatcher.Invoke (() =>
+      {
+         if (mScene is null)
+            throw new InvalidOperationException ("mScene is not initialized.");
+
+         mScene.Bound3 = bound;
+      });
+   }
+   void OnSimulationFinished () {
+      var simulator = mProcessSimulator
+          ?? throw new InvalidOperationException ("mProcessSimulator is not initialized.");
+
+      simulator.SimulationStatus = ProcessSimulator.ESimulationStatus.NotRunning;
+   }
 
    void OnFileSelected (object sender, RoutedEventArgs e) {
       if (Files.SelectedItem != null)
@@ -361,7 +373,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged {
       OpenFileDialog openFileDialog;
       if (string.IsNullOrEmpty (mSrcDir))
          mSrcDir = @"W:\ProfileCAM\Sample";
-      string inputFileType = Environment.GetEnvironmentVariable ("FC_INPUT_FILE_TYPE");
+      string? inputFileType = Environment.GetEnvironmentVariable ("FC_INPUT_FILE_TYPE");
       if (!string.IsNullOrEmpty (inputFileType) && inputFileType.ToUpper ().Equals ("FX")) {
          openFileDialog = new () {
             Filter = "IGS Files (*.igs;*.iges)|*.igs;*.iges|STEP Files (*.stp;*.step)|*.stp;*.step|FX Files (*.fx)|*.fx|CSV Files (*.csv)|*.csv|All files (*.*)|*.*",
@@ -637,8 +649,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged {
    }
 
    public string WindowTitle => string.IsNullOrEmpty (CurrentFile)
-       ? "ProfileCAM"
-       : $"ProfileCAM :: {CurrentFile}";
+       ? "Profile CAM"
+       : $"Profile CAM :: {CurrentFile}";
 
 
    public ObservableCollection<string> RecentFiles { get; set; } = [];
@@ -1063,7 +1075,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged {
 
    public static Dictionary<string, string> LoadRecentFilesFromJSON (string jsonFileName) {
 
-      Dictionary<string, string> map = [], recentFiles = [];
+      Dictionary<string, string>? map = [], recentFiles = [];
       if (string.IsNullOrWhiteSpace (jsonFileName))
          throw new ArgumentException ("jsonFileName must be a non-empty path.", nameof (jsonFileName));
 
@@ -1142,8 +1154,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged {
                if (loadedRef == null) {
                   // Try to find this missing assembly in the Flux SDK directory
                   string? sdkPath = SPath.GetDirectoryName (Assembly.GetExecutingAssembly ().Location);
+                  if (sdkPath == null) throw new Exception ("One or more 3rd party libraries are missing");
                   var possiblePaths = new[]
-                  {
+                  {  
                         Path.Combine(sdkPath, $"{refAssembly.Name}.dll"),
                         Path.Combine(sdkPath, $"{refAssembly.Name}.exe"),
                         Path.Combine(AppDomain.CurrentDomain.BaseDirectory, $"{refAssembly.Name}.dll")

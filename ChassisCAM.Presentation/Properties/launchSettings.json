@@ -1,8 +1,0 @@
-{
-  "profiles": {
-    "FChassis": {
-      "commandName": "Project",
-      "nativeDebugging": true
-    }
-  }
-}

@@ -1,7 +1,7 @@
 #pragma once
 
 class IGESNative;
-namespace ChassisCAM::IGES {
+namespace ProfileCAM::IGES {
    public ref class IGES {
       public:
       IGES();

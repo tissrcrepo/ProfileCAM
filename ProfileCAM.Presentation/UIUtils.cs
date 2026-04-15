@@ -43,7 +43,7 @@ public class PathUtils {
       return windowsPath;
    }
 
-   public static string ConvertToLinuxPath (string inputPath, bool isFile = false) {
+   public static string ConvertToLinuxPath (string? inputPath, bool isFile = false) {
       if (string.IsNullOrWhiteSpace (inputPath)) {
          throw new ArgumentException ("Input path cannot be null or empty.");
       }

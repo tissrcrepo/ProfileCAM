@@ -3,8 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Join" Height="800" Width="1800"
     
-        xmlns:Wnds="using:ChassisCAM.Presentation.Windows"
-        x:Class="ChassisCAM.Presentation.JoinWindow">
+        xmlns:Wnds="using:ProfileCAM.Presentation.Windows"
+        x:Class="ProfileCAM.Presentation.JoinWindow">
     <Grid>
         <!-- Define Rows and Columns -->
         <Grid.RowDefinitions>

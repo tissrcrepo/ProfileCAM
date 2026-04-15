@@ -1525,7 +1525,9 @@ public static class Utils {
          Bound3 bbox = Geom.ComputeBBox (seg.Curve, seg.Vec0, partBBox);
          cumBBox = cumBBox == null ? bbox : cumBBox + bbox;
       }
-      return cumBBox.Value;
+      if ( cumBBox.HasValue)
+         return cumBBox.Value;
+      throw new Exception ("Cumulative bounding box not defined");
    }
 
    /// <summary>
