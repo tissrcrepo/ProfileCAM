@@ -190,6 +190,9 @@ namespace ProfileCAM.Presentation.Draw {
                   }
 
                   //mMachiningTool.Draw (trfObject0, trfObject1, mDispatcher);
+                  if (GenesysHub.MachiningTool == null)
+                     throw new Exception ("Machining tool is not set for GenesysHub");
+
                   DrawUtils.DrawLaserCuttingTools (GenesysHub.MachiningTool, Dispatch, trfObject0, trfObject1);
 
                   return; // Exit the loop after drawing
@@ -208,6 +211,9 @@ namespace ProfileCAM.Presentation.Draw {
                   }
 
                   //mMachiningTool.Draw (trfObject0, trfObject1, mDispatcher);
+                  if (GenesysHub.MachiningTool == null)
+                     throw new Exception ("Machining tool is not set for GenesysHub");
+
                   DrawUtils.DrawLaserCuttingTools (GenesysHub.MachiningTool, Dispatch, trfObject0, trfObject1);
 
                   // Finish the simulation trigger
@@ -221,11 +227,16 @@ namespace ProfileCAM.Presentation.Draw {
                   TriggerRedraw?.Invoke ();
 
                   // Restore the zoom to cover the entire part
+                  if (GenesysHub.Workpiece == null)
+                     throw new Exception ("Genesyshub's Workpiece is null");
+
                   zoomExtentsWithBound3Delegate?.Invoke (GenesysHub.Workpiece.Bound);
                   return;
                }
             } else {
                //mMachiningTool.Draw (trfObject0, trfObject1, mDispatcher);
+               if (GenesysHub.MachiningTool == null)
+                  throw new Exception ("Machining tool is not set for GenesysHub");
                DrawUtils.DrawLaserCuttingTools (GenesysHub.MachiningTool, Dispatch, trfObject0, trfObject1);
                return;
             }

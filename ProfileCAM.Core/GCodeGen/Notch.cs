@@ -2826,7 +2826,6 @@ double radius, double thickness, MCSettings.PartConfigType partConfigType) {
       Point3 bdyPtXMin, bdyPtXMax, bdyPtZMin;
       Vector3 normalAtNotchPt;
       double t;
-      Arc3 arc;
       bdyPtXMin = new Point3 (bound.XMin, pt.Y, pt.Z);
       bdyPtXMax = new Point3 (bound.XMax, pt.Y, pt.Z);
       switch (profileKind) {
@@ -2837,7 +2836,7 @@ double radius, double thickness, MCSettings.PartConfigType partConfigType) {
                if (bdyYExtreme - pt.Y < 0) proxBdy = XForm4.EAxis.NegY;
                else proxBdy = XForm4.EAxis.Y;
             } else {
-               if (seg.Curve is Arc3) {
+               if (seg.Curve is FCArc3) {
                   //arc = seg.Curve as Arc3;
                   //var (tgt, _) = Geom.EvaluateTangentAndNormalAtPoint (arc, pt, seg.Vec0.Normalized ());
                   // To find the scrapside normal for arcs
@@ -2886,7 +2885,7 @@ double radius, double thickness, MCSettings.PartConfigType partConfigType) {
             double OrdX;
             double OrdY = bound.Min.Y;
             double OrdZ = bound.Max.Z;
-            if (seg.Curve is Arc3) {
+            if (seg.Curve is FCArc3) {
                if (pt.DistTo (bdyPtXMin)
                         < pt.DistTo (bdyPtXMax))
                   proxBdy = XForm4.EAxis.NegX;

@@ -2193,6 +2193,9 @@ public static class Utils {
    public static List<List<GCodeSeg>> ComputeGCode (GCodeGenerator gcodeGen, bool testing = false, double tol = 1e-6) {
       List<List<GCodeSeg>> traces = [[], []];
 
+      if (gcodeGen.Process.Workpiece == null)
+         throw new Exception ("Workpiece is not set at gcodeGen.Process.Workpiece");
+
       // Check if the workpiece needs a multipass cutting
       if (gcodeGen.EnableMultipassCut && gcodeGen.Process.Workpiece.Model.Bound.XMax - gcodeGen.Process.Workpiece.Model.Bound.XMin >= gcodeGen.MaxFrameLength)
          gcodeGen.EnableMultipassCut = true;
@@ -2206,12 +2209,16 @@ public static class Utils {
          gcodeGen.ResetBookKeepers ();
       }
       if (gcodeGen.EnableMultipassCut && MultiPassCuts.IsMultipassCutTask (gcodeGen.Process.Workpiece.Model)) {
-#if false
+#if true
          double MinFL = 800;
          double MaxFL = gcodeGen.MaxFrameLength;
 
          // Get all part multi frams.
          PartMultiFrames partMultiFrames = new (gcodeGen, MinFL, tol);
+         partMultiFrames.Optimize ();
+         var optimalFrames = partMultiFrames.OptimalFrames;
+         int aa = 0;
+         ++aa;
       }
       return traces;
 #else
@@ -2764,21 +2771,21 @@ public static class Utils {
    public static PointVec? GetStartPos (List<ToolScope<Tooling>> tss) {
       ArgumentNullException.ThrowIfNull (tss);
       if (tss.Count == 0)
-         return new PointVec ();
+         return null;
       return new PointVec (tss[0].Tooling.Segs[0].Curve.Start, tss[0].Tooling.Segs[0].Vec0.Normalized ());
    }
 
-   public static PointVec GetEndPos (List<ToolScope<Tooling>> tss) {
+   public static PointVec? GetEndPos (List<ToolScope<Tooling>> tss) {
       ArgumentNullException.ThrowIfNull (tss);
       if (tss.Count == 0)
-         throw new ArgumentException ("toolscopes tss is empty", nameof (tss));
+         return null;
       return new PointVec (tss[0].Tooling.Segs[^1].Curve.Start, tss[0].Tooling.Segs[^1].Vec0.Normalized ());
    }
 
-   public static PointVec GetPosAt (List<ToolScope<Tooling>> tss, int index) {
+   public static PointVec? GetPosAt (List<ToolScope<Tooling>> tss, int index) {
       ArgumentNullException.ThrowIfNull (tss);
       if (tss.Count == 0)
-         throw new ArgumentException ("toolscopes tss is empty", nameof (tss));
+         return null;
       return new PointVec (tss[index].Tooling.Segs[^1].Curve.Start, tss[index].Tooling.Segs[^1].Vec0.Normalized ());
    }
 }

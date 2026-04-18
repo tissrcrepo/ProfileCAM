@@ -38,7 +38,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged {
    string mSrcDir = "W:/ProfileCAM/Sample";
 
    [IgnoreDataMember]
-   Dictionary<string, string> mRecentFilesMap = [];
+   Dictionary<string, string>? mRecentFilesMap = [];
    public bool IsIgesAvailable { get; set; }
    public ProcessSimulator.ESimulationStatus SimulationStatus {
       get => mSimulationStatus;
@@ -604,19 +604,22 @@ public partial class MainWindow : Window, INotifyPropertyChanged {
          // should be concatanated with new one mRecentFilesMap.
          // If no file was ever opened, the old recent files will be overwritten 
          // with nothing. This has to be avoided
-         var oldRecentFiles = LoadRecentFilesFromJSON (recentFilesJSONPath);
-         mRecentFilesMap = mRecentFilesMap
-          .Concat (oldRecentFiles)
-          .GroupBy (kvp => kvp.Key)
-          .ToDictionary (
-              g => g.Key,
-              g => g.Max (kvp => kvp.Value)  // Keeps the LATEST timestamp
-          );
 
-         TrimRecentFilesMap (mRecentFilesMap);
+         if (mRecentFilesMap != null) {
+            var oldRecentFiles = LoadRecentFilesFromJSON (recentFilesJSONPath);
+            mRecentFilesMap = mRecentFilesMap
+             .Concat (oldRecentFiles)
+             .GroupBy (kvp => kvp.Key)
+             .ToDictionary (
+                 g => g.Key,
+                 g => g.Max (kvp => kvp.Value)  // Keeps the LATEST timestamp
+             );
 
-         // Recent files JSON (MCSettings manages mRecentFilesMap internally)
-         SaveRecentFilesToJSON (mRecentFilesMap, recentFilesJSONPath);
+            TrimRecentFilesMap (mRecentFilesMap);
+
+            // Recent files JSON (MCSettings manages mRecentFilesMap internally)
+            SaveRecentFilesToJSON (mRecentFilesMap, recentFilesJSONPath);
+         }
       } catch (Exception) {
       }
    }
@@ -655,16 +658,20 @@ public partial class MainWindow : Window, INotifyPropertyChanged {
 
    public ObservableCollection<string> RecentFiles { get; set; } = [];
 
-   public Workpiece Work {
+   public Workpiece? Work {
       get => mWork;
       set {
-         mWork = value;
-         mGHub.Workpiece = mWork;
-         OnPropertyChanged (nameof (Work));
+         // Prevent null from propagating to mGHub if it's non-nullable
+         ArgumentNullException.ThrowIfNull (mGHub);
+         if (mWork != value) {
+            mWork = value;
+            mGHub.Workpiece = value;        // Still requires mGHub.Workpiece to accept null
+            OnPropertyChanged (nameof (Work));
+         }
       }
    }
 
-   public GenesysHub GenesysHub {
+   public GenesysHub? GenesysHub {
       get => mGHub;
       set {
          if (mGHub != value)  // Check if value is different
@@ -730,8 +737,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged {
                break;
 
             default:
-               if (Work.Cuts.Count == 0)
-                  Lux.Draw (EMarker2D.CSMarker, CoordSystem.World, 25);
+               if (Work != null) {
+                  if (Work.Cuts.Count == 0)
+                     Lux.Draw (EMarker2D.CSMarker, CoordSystem.World, 25);
+               }
                break;
          }
 
@@ -834,6 +843,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged {
    bool _cutHoles = false, _cutNotches = false, _cutMarks = false;
    void DoAlign (object sender, RoutedEventArgs e) {
       if (!HandleNoWorkpiece ()) {
+         if ( Work == null )
+            throw new Exception ("Work is set null");
+
          Work.Align ();
          if (mScene != null)
             mScene.Bound3 = Work.Model.Bound;
@@ -850,7 +862,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged {
 
    void DoAddHoles (object sender, RoutedEventArgs e) {
       if (!HandleNoWorkpiece () && !_cutHoles) {
-         if (Work.DoAddHoles ())
+         if (Work != null &&  Work.DoAddHoles ())
             GenesysHub?.ClearZombies ();
          _cutHoles = true;
          mOverlay?.Redraw ();
@@ -860,7 +872,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged {
    void DoTextMarking (object sender, RoutedEventArgs e) => DrawTextMarking ();
 
    void DrawTextMarking () {
-      if (!HandleNoWorkpiece () && !_cutMarks) {
+      if (!HandleNoWorkpiece () && !_cutMarks && Work != null) {
          if (Work.DoTextMarking (MCSettings.It))
             GenesysHub?.ClearZombies ();
          _cutMarks = true;
@@ -869,7 +881,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged {
    }
 
    void DoCutNotches (object sender, RoutedEventArgs e) {
-      if (!HandleNoWorkpiece () && !_cutNotches) {
+      if (!HandleNoWorkpiece() && !_cutNotches && Work != null) {
          if (Work.DoCutNotchesAndCutouts ())
             GenesysHub?.ClearZombies ();
          _cutNotches = true;
@@ -878,7 +890,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged {
    }
    void DoRefresh (object sender, RoutedEventArgs e) => mOverlay?.Redraw ();
    void DoSorting (object sender, RoutedEventArgs e) {
-      if (!HandleNoWorkpiece ()) {
+      if (!HandleNoWorkpiece () && Work != null) {
          Work.DoSorting ();
          mOverlay?.Redraw ();
       }
@@ -895,8 +907,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged {
 
 #if DEBUG || TESTRELEASE
          try {
+            if (GenesysHub == null)
+               throw new Exception ("Genesyshub is null");
             GenesysHub.ComputeGCode ();
-         } catch (Exception ex) {
+         } catch (Exception) {
             // 2. Restore cursor ONCE at the end — guaranteed
             this.Dispatcher.Invoke (() => {
                this.Cursor = Cursors.Arrow;
@@ -974,6 +988,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged {
 
    void LoadGCode (string filename) {
       try {
+         if (GenesysHub == null)
+            throw new Exception ("Genesyshub is null");
          GenesysHub.LoadGCode (filename);
       } catch (Exception ex) {
          MessageBox.Show (ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -988,10 +1004,20 @@ public partial class MainWindow : Window, INotifyPropertyChanged {
    void OpenDinsForFile (string selectedFile) {
       string dinFileNameH1 = "", dinFileNameH2 = "";
       try {
-         string[] paths = Environment.GetEnvironmentVariable ("PATH")?.Split (';');
-         string notepadPlusPlus = paths?.Select (p => System.IO.Path.Combine (p, "notepad++.exe")).FirstOrDefault (File.Exists);
-         string notepad = paths?.Select (p => System.IO.Path.Combine (p, "notepad.exe")).FirstOrDefault (File.Exists);
-         string editor = notepadPlusPlus ?? notepad; // Prioritize Notepad++, fallback to Notepad
+         string? editor = null;
+
+         var pathsEnv = Environment.GetEnvironmentVariable ("PATH");
+         if (!string.IsNullOrEmpty (pathsEnv)) {
+            var paths = pathsEnv.Split (';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+            string? npp = paths.Select (p => Path.Combine (p, "notepad++.exe"))
+                               .FirstOrDefault (File.Exists);
+
+            string? np = paths.Select (p => Path.Combine (p, "notepad.exe"))
+                              .FirstOrDefault (File.Exists);
+
+            editor = npp ?? np;
+         }
 
          if (editor == null) {
             MessageBox.Show ("Neither Notepad++ nor Notepad was found in the system PATH.", "Error",
@@ -1073,7 +1099,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged {
       return recFiles;
    }
 
-   public static Dictionary<string, string> LoadRecentFilesFromJSON (string jsonFileName) {
+   public static Dictionary<string, string>? LoadRecentFilesFromJSON (string jsonFileName) {
 
       Dictionary<string, string>? map = [], recentFiles = [];
       if (string.IsNullOrWhiteSpace (jsonFileName))

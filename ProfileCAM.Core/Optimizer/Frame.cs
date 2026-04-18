@@ -27,8 +27,8 @@ namespace ProfileCAM.Core.Optimizer {
       public List<Tooling> ToolingsH12 = [];
       public List<Tooling> ToolingsH21 = [];
       public List<Tooling> ToolingsH22 = [];
-      public readonly PointVec FinishPositionHead1 => Utils.GetEndPos (FrameToolScopesH12);
-      public readonly PointVec FinishPositionHead2 => Utils.GetEndPos (FrameToolScopesH22);
+      public readonly PointVec? FinishPositionHead1 => Utils.GetEndPos (FrameToolScopesH12);
+      public readonly PointVec? FinishPositionHead2 => Utils.GetEndPos (FrameToolScopesH22);
 
       public double MinFL { get; set; } = 0;
       public double MaxFL { get; set; } = 0;
@@ -46,7 +46,10 @@ namespace ProfileCAM.Core.Optimizer {
       public double MachiningTimeH2 { get; private set; } = 0;
       public double RapidPosTimeH1 { get; private set; } = 0;
       public double RapidPosTimeH2 { get; private set; } = 0;
+      public double TotalRapidPosTime { get; private set; } = 0;
+      public double WaitTime { get; private set; } = 0;
       public double TotalMachiningTime { get; private set; } = 0;
+      public double TotalProcessTime { get; private set; } = 0;
       public FrameMachinableStatus MachinableStatus { get; private set; } = FrameMachinableStatus.Impossible;
 
       // Replace node references with indices
@@ -73,13 +76,13 @@ namespace ProfileCAM.Core.Optimizer {
           double maxFL,
           int startIndex, // in allToolScopes
           int endIndex, // in frameToolScopes
-          PointVec prevFrameFinishPosH1,
-          PointVec prevFrameFinishPosH2,
+          PointVec? prevFrameFinishPosH1,
+          PointVec? prevFrameFinishPosH2,
           double rapidPosSpeed,
           double mcSpeed,
           double sOff2EngageTime,
           double sOffDist,
-          double tol = 1 - 6) {
+          double tol = 1e-6) {
          mGcGen = gcGen;
          Tol = tol;
          mPrevFrameFinishPosH1 = prevFrameFinishPosH1;
@@ -238,7 +241,10 @@ namespace ProfileCAM.Core.Optimizer {
          MachiningTimeH1 = mcTimeH11 + mcTimeH12;
          MachiningTimeH2 = mcTimeH21 + mcTimeH22;
 
-         TotalMachiningTime = RapidPosTimeH2 + RapidPosTimeH1 + MachiningTimeH1 + MachiningTimeH2 + Math.Abs (MachiningTimeH1 - MachiningTimeH2);
+         TotalRapidPosTime = RapidPosTimeH2 + RapidPosTimeH1;
+         WaitTime = Math.Abs (MachiningTimeH1 - MachiningTimeH2);
+         TotalMachiningTime = MachiningTimeH1 + MachiningTimeH2 ;
+         TotalProcessTime = TotalMachiningTime + WaitTime + TotalRapidPosTime;
       }
       readonly List<ToolScope<Tooling>> GetToolScopes (Bucket bucket) {
          List<ToolScope<Tooling>> toolScopes = bucket switch {
@@ -268,7 +274,8 @@ namespace ProfileCAM.Core.Optimizer {
          else if (previousBucket != null) {
             var prevBucketToolScopes = GetToolScopes (previousBucket.Value);
             var lastBuckerPos = Utils.GetEndPos (prevBucketToolScopes);
-            rapidPosDist += Utils.GetRapidPosDist (lastBuckerPos, Utils.GetStartPos (toolScopes));
+            if ( lastBuckerPos != null )
+               rapidPosDist += Utils.GetRapidPosDist (lastBuckerPos, Utils.GetStartPos (toolScopes));
          }
 
          // Get the rapid pos dist from previous frame
@@ -288,7 +295,7 @@ namespace ProfileCAM.Core.Optimizer {
             // Compute machining distance and time.
             var toolingLength = Utils.GetToolingLength (toolScopes[ii].Tooling);
             mcTime += toolingLength / mMcSpeed;
-            toolScopes[ii].IsProcessed = true;
+            //toolScopes[ii].IsProcessed = true;
          }
 
          return (rapidPosTime, mcTime);

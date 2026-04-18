@@ -5,6 +5,7 @@ using Flux.API;
 
 namespace ProfileCAM.Core.Processes {
    /// <summary>GenesysHub is used to generate G-Code, and the Traces for simulation</summary>
+   #nullable enable
    public class GenesysHub : INotifyPropertyChanged {
       #region G Code Drawables and Utilities
       List<List<GCodeSeg>> mTraces = [[], []];
@@ -19,8 +20,8 @@ namespace ProfileCAM.Core.Processes {
       #endregion
 
       #region Digital Twins - Resources and Workpiece
-      Workpiece mWorkpiece;
-      public Workpiece Workpiece {
+      Workpiece? mWorkpiece;
+      public Workpiece? Workpiece {
          get => mWorkpiece;
          set {
             if (mWorkpiece != value) {
@@ -29,12 +30,12 @@ namespace ProfileCAM.Core.Processes {
             }
          }
       }
-      Nozzle mMachiningTool;
-      public Nozzle MachiningTool { get => mMachiningTool; set => mMachiningTool = value; }
+      Nozzle? mMachiningTool;
+      public Nozzle? MachiningTool { get => mMachiningTool; set => mMachiningTool = value; }
       #endregion
 
       #region Property changed event handlers
-      public event PropertyChangedEventHandler PropertyChanged;
+      public event PropertyChangedEventHandler? PropertyChanged;
       protected void OnPropertyChanged (string propertyName) {
          PropertyChanged?.Invoke (this, new PropertyChangedEventArgs (propertyName));
       }
