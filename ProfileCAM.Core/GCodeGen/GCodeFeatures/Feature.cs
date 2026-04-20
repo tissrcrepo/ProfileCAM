@@ -1,6 +1,6 @@
 ﻿using ProfileCAM.Core.Geometries;
 
-namespace ProfileCAM.Core.GCodeGen {
+namespace ProfileCAM.Core.GCodeGen.GCodeFeatures {
    /// <summary>
    /// This abstract class captures the abstract methods that a ToolingFeature to be tooled
    /// shall implement

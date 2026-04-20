@@ -1,7 +1,6 @@
 ﻿using System.Text;
 using static System.Math;
 using Flux.API;
-using ProfileCAM.Core.GCodeGen;
 using ProfileCAM.Core.Geometries;
 using System.Text.Json;
 using static ProfileCAM.Core.Geometries.Geom;
@@ -9,6 +8,9 @@ using static ProfileCAM.Core.MCSettings;
 using ProfileCAM.Core.Optimizer;
 using System.Diagnostics;
 using ProfileCAM.Core;
+using ProfileCAM.Core.GCodeGen.LCMMultipass2HLegacy;
+using ProfileCAM.Core.GCodeGen.GCodeFeatures;
+using ProfileCAM.Core.GCodeGen;
 
 namespace ProfileCAM.Core;
 
@@ -1072,7 +1074,7 @@ public static class Utils {
    /// <returns></returns>
    
    public static List<ToolingSegment> AddLeadinToTooling (Tooling toolingItem, List<ToolingSegment> segs,
-      GCodeGenerator? gcgen = null, double leastCurveLength = 0.5) {
+      IGCodeGenerator? gcgen = null, double leastCurveLength = 0.5) {
       // If the tooling item is Mark, no need of creating the G Code
       if (toolingItem.IsMark ()) return [.. toolingItem.Segs];
 
@@ -1545,6 +1547,7 @@ public static class Utils {
                          bounds.Max (b => b.ZMax));
    }
 
+   
    /// <summary>
    /// This method is used to compute 3d point intersecting the 
    /// segment in list of segments, whose X value alone is specified. 
@@ -2209,7 +2212,7 @@ public static class Utils {
          gcodeGen.ResetBookKeepers ();
       }
       if (gcodeGen.EnableMultipassCut && MultiPassCuts.IsMultipassCutTask (gcodeGen.Process.Workpiece.Model)) {
-#if true
+#if false
          double MinFL = 800;
          double MaxFL = gcodeGen.MaxFrameLength;
 
@@ -2706,10 +2709,9 @@ public static class Utils {
       return false;
    }
 
-   public static (double MinStartX, double MaxEndX)? GetBounds (
-       List<ToolScope<Tooling>> toolScopes) {
-      if (toolScopes is null)
-         throw new ArgumentNullException (nameof (toolScopes));
+   public static (double MinStartX, double MaxEndX)? GetScope (
+        List<ToolScope<Tooling>> toolScopes) {
+      ArgumentNullException.ThrowIfNull (toolScopes);
 
       if (toolScopes.Count == 0)
          return null;

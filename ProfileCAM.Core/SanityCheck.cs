@@ -1,7 +1,7 @@
 using System.Diagnostics;
-using ProfileCAM.Core.GCodeGen;
 using ProfileCAM.Core.Processes;
 using Flux.API;
+using ProfileCAM.Core.GCodeGen.LCMMultipass2HLegacy;
 
 namespace ProfileCAM.Core {
    /// <summary>Implements a very basic sanity check</summary>

@@ -1,10 +1,10 @@
-﻿using ProfileCAM.Core.GCodeGen;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Flux.API;
+using ProfileCAM.Core.GCodeGen.GCodeFeatures;
 
 namespace ProfileCAM.Core.Geometries;
 public struct ToolingSegment {

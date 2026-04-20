@@ -1,7 +1,7 @@
-﻿using ProfileCAM.Core.GCodeGen;
-using Flux.API;
+﻿using Flux.API;
 using System.Collections.Generic;
 using static ProfileCAM.Core.Utils;
+using ProfileCAM.Core.GCodeGen.GCodeFeatures;
 
 namespace ProfileCAM.Core.Geometries {
    public struct SegmentedPositionType {

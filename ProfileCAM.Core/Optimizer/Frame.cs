@@ -3,8 +3,8 @@ using ProfileCAM.Core.Optimizer;
 using ProfileCAM.Core;
 using ProfileCAM.Core.Geometries;
 using System.Linq.Expressions;
-using ProfileCAM.Core.GCodeGen;
 using Flux.API;
+using ProfileCAM.Core.GCodeGen.LCMMultipass2HLegacy;
 
 namespace ProfileCAM.Core.Optimizer {
    public struct Frame {
@@ -13,6 +13,11 @@ namespace ProfileCAM.Core.Optimizer {
          H12,
          H21,
          H22
+      }
+      public enum HeadType {
+         Master,
+         Slave,
+         Infer
       }
       public List<ToolScope<Tooling>> FrameToolScopesList { get; set; } = [];
       public List<ToolScope<Tooling>> AllToolScopesList { get; set; } = [];
@@ -65,7 +70,8 @@ namespace ProfileCAM.Core.Optimizer {
 
       public double Tol { get; set; } = 1e-6;
       double A, B, C;
-
+      public bool IsLastPass {  get; private set; }
+      public bool IsHead1Job { get; private set; } = false;
       public Frame () { }
 
       public Frame (
@@ -82,14 +88,24 @@ namespace ProfileCAM.Core.Optimizer {
           double mcSpeed,
           double sOff2EngageTime,
           double sOffDist,
+          bool isPossibleLastFrame,
           double tol = 1e-6) {
+         // Find if the frame is the last one
+         double partLastToolScopeEx = allToolScopes.Count == 0
+                                      ? 0
+                                      : allToolScopes.Max (ts => ts.EndX);
+         double frameLastToolScopeEx = frameToolScopes.Count == 0
+                                      ? 0
+                                      : frameToolScopes.Max (ts => ts.EndX);
+         bool isLastFrame = partLastToolScopeEx.EQ (frameLastToolScopeEx);
+
          mGcGen = gcGen;
          Tol = tol;
          mPrevFrameFinishPosH1 = prevFrameFinishPosH1;
          mPrevFrameFinishPosH2 = prevFrameFinishPosH2;
          AllToolScopesList = allToolScopes ?? throw new FrameNotProcessableException ("Empty frame");
          FrameToolScopesList = frameToolScopes ?? throw new FrameNotProcessableException ("Empty frame");
-
+         
          StartIndex = startIndex;
          EndIndex = endIndex;
 
@@ -117,6 +133,12 @@ namespace ProfileCAM.Core.Optimizer {
          EndX = FrameToolScopesByEX[^1].EndX;
 
          var delta = (EndX - StartX) / 2 - MinFL;
+         
+         // Heuristic for the last pass. Here the Sx - A - B - C - Ex 
+         // will not be having a complete length. If the Ex-Sx <= MinFL + 100
+         // then it is marked as single head
+         if ((EndX - StartX).LTEQ (minFL + 100) && isPossibleLastFrame)
+            IsHead1Job = true;
 
          A = Head11EndX = StartX + delta;
          B = Head12EndX = Head11EndX + MinFL;
@@ -127,89 +149,9 @@ namespace ProfileCAM.Core.Optimizer {
          FrameToolScopesH21 = [];
          FrameToolScopesH22 = [];
 
-         // No intersection of toolscopes at "B" or the center is desired. Dilemma arised
-         // as to which of the buckets the ixn tss be part of., FrameToolScopesH12 or FrameToolScopesH21
-         // This dilemma is solved using moving B line either to right or left depending on 
-         // which side the defference is lesser
-         // The intention is to avoid any tool scopes intersecting at "B"
-         double leftOffset = 0, rightOffset = 0;
-         double cumLeftOffset = 0, cumRightOffset = 0;
-         //double leftSideGap = 0;
-         double a = A, b1 = B, b2 = B, c = C;
-         bool leftOffsetStrategy = true, rightOffsetStrategy = true;
-         bool needToLeftOffset = false, needToRightOffset = false;
-         while (true) {
-            var ixnTSSAtFrameCenter = PartMultiFrames.GetToolScopesIxnAt (FrameToolScopesList, b1, excludeProcessed: true, startIndex: 0, tol: tol);
-
-            if (ixnTSSAtFrameCenter.Count > 0) {
-               needToLeftOffset = true;
-               var ixnTSSAtFrameCenterBounds = Utils.GetBounds (ixnTSSAtFrameCenter);
-               if (ixnTSSAtFrameCenterBounds != null)
-                  leftOffset = -(b1 - ixnTSSAtFrameCenterBounds.Value.MinStartX);
-               if (leftOffset > 30.0)
-                  leftOffsetStrategy = false;
-
-            } else
-               break;
-            b1 += leftOffset;
-            cumLeftOffset += leftOffset;
-         }
-
-         while (true) {
-            var ixnTSSAtFrameCenter = PartMultiFrames.GetToolScopesIxnAt (FrameToolScopesList, b2, excludeProcessed: true, startIndex: 0, tol: tol);
-
-            if (ixnTSSAtFrameCenter.Count > 0) {
-               needToRightOffset = true;
-               var ixnTSSAtFrameCenterBounds = Utils.GetBounds (ixnTSSAtFrameCenter);
-               if (ixnTSSAtFrameCenterBounds != null)
-                  //leftSideGap = B - ixnTSSAtFrameCenterBounds.Value.MinStartX;
-                  rightOffset = ixnTSSAtFrameCenterBounds.Value.MaxEndX - b2;
-               else
-                  break;
-               if (rightOffset > 30.0)
-                  rightOffsetStrategy = false;
-
-               b2 += rightOffset;
-               cumRightOffset += rightOffset;
-
-            } else
-               break;
-         }
-
-         if (needToLeftOffset || needToRightOffset) {
-            if (!leftOffsetStrategy && !rightOffsetStrategy) {
-               var offset = leftOffset > rightOffset ? leftOffset : rightOffset;
-               throw new Exception ($"The arrangement of toolscopes occuring at the middle intersects with middle line ( bucker boundary between H12 and H21) and the offset middle line is computed to be more than {offset}");
-            }
-
-            if (leftOffsetStrategy && rightOffsetStrategy) {
-               var offset = cumLeftOffset < cumRightOffset ? cumLeftOffset : cumRightOffset;
-               A += offset;
-               Head11EndX = A;
-               B += offset;
-               Head12EndX = B;
-               C += offset;
-               Head21EndX = C;
-            } else if (leftOffsetStrategy) {
-               A += cumLeftOffset;
-               Head11EndX = A;
-               B += cumLeftOffset;
-               Head12EndX = B;
-               C += cumLeftOffset;
-               Head21EndX = C;
-            } else {
-               A += cumRightOffset;
-               Head11EndX = A;
-               B += cumRightOffset;
-               Head12EndX = B;
-               C += cumRightOffset;
-               Head21EndX = C;
-            }
-         }
-         if (PartMultiFrames.GetToolScopesIxnAt (FrameToolScopesList, B, excludeProcessed: true, startIndex: 0, tol: tol).Count > 0)
-            throw new Exception ("Tool Scopes intersect at B line");
 
 
+         OffsetABCD ();
          CollectToolScopesInBuckets ();
          CheckToolScopesIXNAtXPositions ();
          CheckCountConsistency ();
@@ -220,10 +162,10 @@ namespace ProfileCAM.Core.Optimizer {
          ToolingsH12 = Utils.GetToolings4Head (FrameToolScopesH12, 0, mGcGen.GCodeGenSettings);
          ToolingsH21 = Utils.GetToolings4Head (FrameToolScopesH21, 1, mGcGen.GCodeGenSettings);
          ToolingsH22 = Utils.GetToolings4Head (FrameToolScopesH22, 1, mGcGen.GCodeGenSettings);
-         if (FrameToolScopesH11.Count > 0 && FrameToolScopesH12.Count > 0 && FrameToolScopesH21.Count > 0 && FrameToolScopesH22.Count > 0) {
-            int aa = 0;
-            ++aa;
-         }
+         //if (FrameToolScopesH11.Count > 0 && FrameToolScopesH12.Count > 0 && FrameToolScopesH21.Count > 0 && FrameToolScopesH22.Count > 0) {
+         //   int aa = 0;
+         //   ++aa;
+         //}
          FindMachinableStatus ();
          if (MachinableStatus != FrameMachinableStatus.Machinable)
             return;
@@ -242,7 +184,7 @@ namespace ProfileCAM.Core.Optimizer {
          MachiningTimeH2 = mcTimeH21 + mcTimeH22;
 
          TotalRapidPosTime = RapidPosTimeH2 + RapidPosTimeH1;
-         WaitTime = Math.Abs (MachiningTimeH1 - MachiningTimeH2);
+         WaitTime = Math.Abs (MachiningTimeH1 - MachiningTimeH2) * 10.0; // Scale factor for waiting time
          TotalMachiningTime = MachiningTimeH1 + MachiningTimeH2 ;
          TotalProcessTime = TotalMachiningTime + WaitTime + TotalRapidPosTime;
       }
@@ -302,16 +244,20 @@ namespace ProfileCAM.Core.Optimizer {
       }
       
       readonly void CheckCountConsistency () {
+         if (IsHead1Job) return;
          if (FrameToolScopesH11.Count + FrameToolScopesH12.Count + FrameToolScopesH21.Count + FrameToolScopesH22.Count != FrameToolScopesList.Count)
             throw new Exception ("Total tool scopes in the buckets NOT EQUAL to Count in FrameToolScopesList");
       }
       readonly void CheckMinFLConsistency () {
+         if (  IsHead1Job) return;
          if ((C - B).SLT (MinFL))
             throw new Exception ($"The bucket for H2 => H21 {C - B} size lesser than {MinFL} mm");
          if ((B - A).SLT (MinFL))
             throw new Exception ($"The bucket for H2 => H21 {B - A} size lesser than {MinFL} mm");
       }
       public readonly void CheckToolScopesIXNAtXPositions (double tol = 1e-6) {
+         if (IsHead1Job)
+            return;
          // there is no need to find the intersections at A and C. The intersecting tools scopes 
          // at A, are added to FrameToolScopesH12 since the left head can move in -X direction
          // at C, are added to FrameToolScopesH21 since the right head can always move in +X direction
@@ -320,17 +266,145 @@ namespace ProfileCAM.Core.Optimizer {
          if (atB.Count > 0) throw new Exception ("ToolScopes intersect at B");
       }
 
-      readonly void AllocateHeadsToToolScopes () {
-         for (int ii = 0; ii < FrameToolScopesH11.Count; ii++)
-            FrameToolScopesH11[ii].Tooling.Head = 0;
-         for (int ii = 0; ii < FrameToolScopesH12.Count; ii++)
-            FrameToolScopesH12[ii].Tooling.Head = 0;
-         for (int ii = 0; ii < FrameToolScopesH21.Count; ii++)
-            FrameToolScopesH21[ii].Tooling.Head = 1;
-         for (int ii = 0; ii < FrameToolScopesH22.Count; ii++)
-            FrameToolScopesH22[ii].Tooling.Head = 1;
+      readonly void AllocateHeadsToToolScopes (HeadType hType) {
+         int headForLeft = 0;   // H11 & H12
+         int headForRight = 1;   // H21 & H22
+
+         switch (hType) {
+            case HeadType.Master:
+               headForLeft = 0;
+               headForRight = 0;
+               break;
+
+            case HeadType.Slave:
+               headForLeft = 1;
+               headForRight = 1;
+               break;
+
+            case HeadType.Infer:
+               headForLeft = 0;
+               headForRight = 1;
+               break;
+
+            default:
+               throw new ArgumentOutOfRangeException (nameof (hType), hType, "Invalid HeadType");
+         }
+
+         // Apply to all tool scopes in the four buckets
+         SetHeadForList (FrameToolScopesH11, headForLeft);
+         SetHeadForList (FrameToolScopesH12, headForLeft);
+         SetHeadForList (FrameToolScopesH21, headForRight);
+         SetHeadForList (FrameToolScopesH22, headForRight);
+      }
+
+      // Helper method to avoid code duplication
+      private readonly void SetHeadForList (List<ToolScope<Tooling>>? list, int headValue) {
+         if (list == null)
+            return;
+
+         foreach (var ts in list) {
+            if (ts?.Tooling != null) {
+               ts.Tooling.Head = headValue;
+            }
+         }
+      }
+
+      void OffsetABCD () {
+         if (IsHead1Job)
+            return;
+         // No intersection of toolscopes at "B" or the center is desired. Dilemma arised
+         // as to which of the buckets the ixn tss be part of., FrameToolScopesH12 or FrameToolScopesH21
+         // This dilemma is solved using moving B line either to right or left depending on 
+         // which side the defference is lesser
+         // The intention is to avoid any tool scopes intersecting at "B"
+         double leftOffset = 0, rightOffset = 0;
+         double cumLeftOffset = 0, cumRightOffset = 0;
+         //double leftSideGap = 0;
+         double a = A, b1 = B, b2 = B, c = C;
+         bool leftOffsetStrategy = true, rightOffsetStrategy = true;
+         bool needToLeftOffset = false, needToRightOffset = false;
+         while (true) {
+            var ixnTSSAtFrameCenter = PartMultiFrames.GetToolScopesIxnAt (FrameToolScopesList, b1, excludeProcessed: true, 
+               startIndex: 0, tol: Tol);
+
+            if (ixnTSSAtFrameCenter.Count > 0) {
+               needToLeftOffset = true;
+               var ixnTSSAtFrameCenterBounds = Utils.GetScope (ixnTSSAtFrameCenter);
+               if (ixnTSSAtFrameCenterBounds != null)
+                  leftOffset = -(b1 - ixnTSSAtFrameCenterBounds.Value.MinStartX);
+               if (leftOffset > 30.0)
+                  leftOffsetStrategy = false;
+
+            } else
+               break;
+            b1 += leftOffset;
+            cumLeftOffset += leftOffset;
+         }
+
+         while (true) {
+            var ixnTSSAtFrameCenter = PartMultiFrames.GetToolScopesIxnAt (FrameToolScopesList, b2, excludeProcessed: true, 
+               startIndex: 0, tol: Tol);
+
+            if (ixnTSSAtFrameCenter.Count > 0) {
+               needToRightOffset = true;
+               var ixnTSSAtFrameCenterBounds = Utils.GetScope (ixnTSSAtFrameCenter);
+               if (ixnTSSAtFrameCenterBounds != null)
+                  //leftSideGap = B - ixnTSSAtFrameCenterBounds.Value.MinStartX;
+                  rightOffset = ixnTSSAtFrameCenterBounds.Value.MaxEndX - b2;
+               else
+                  break;
+               if (rightOffset > 30.0)
+                  rightOffsetStrategy = false;
+
+               b2 += rightOffset;
+               cumRightOffset += rightOffset;
+
+            } else
+               break;
+         }
+
+         if (needToLeftOffset || needToRightOffset) {
+            if (!leftOffsetStrategy && !rightOffsetStrategy) {
+               var offset = leftOffset > rightOffset ? leftOffset : rightOffset;
+               throw new Exception ($"The arrangement of toolscopes occuring at the middle intersects with middle line ( bucker boundary between H12 and H21) and the offset middle line is computed to be more than {offset}");
+            }
+
+            if (leftOffsetStrategy && rightOffsetStrategy) {
+               var offset = cumLeftOffset < cumRightOffset ? cumLeftOffset : cumRightOffset;
+               A += offset;
+               Head11EndX = A;
+               B += offset;
+               Head12EndX = B;
+               C += offset;
+               Head21EndX = C;
+            } else if (leftOffsetStrategy) {
+               A += cumLeftOffset;
+               Head11EndX = A;
+               B += cumLeftOffset;
+               Head12EndX = B;
+               C += cumLeftOffset;
+               Head21EndX = C;
+            } else {
+               A += cumRightOffset;
+               Head11EndX = A;
+               B += cumRightOffset;
+               Head12EndX = B;
+               C += cumRightOffset;
+               Head21EndX = C;
+            }
+         }
+         if (PartMultiFrames.GetToolScopesIxnAt (FrameToolScopesList, B, excludeProcessed: true, startIndex: 0, tol: Tol).Count > 0)
+            throw new Exception ("Tool Scopes intersect at B line");
       }
       void CollectToolScopesInBuckets (double tol = 1e-6) {
+
+         if (IsHead1Job) {
+            FrameToolScopesH11 = PartMultiFrames.GetToolScopesWithin (
+             FrameToolScopesList, StartX, EndX, excludeProcessed: true);
+            AllocateHeadsToToolScopes (HeadType.Master);
+            return;
+         }
+
          double A = Head11EndX;
          double B = Head12EndX;
          double C = Head21EndX;
@@ -374,16 +448,14 @@ namespace ProfileCAM.Core.Optimizer {
          var ixnTSSAtC = PartMultiFrames.GetToolScopesIxnAt (FrameToolScopesList, C, excludeProcessed: true, startIndex: 0, tol: tol);
          FrameToolScopesH21.AddRange (ixnTSSAtC);
 
-
-
-
          // Collect tool scopes within H22
          FrameToolScopesH22 = PartMultiFrames.GetToolScopesWithin (
              FrameToolScopesList, C, EndX, excludeProcessed: true);
 
 
          // Find the intersecting tool scopes at EndX
-         var ixnTSSAtFrameEnd = PartMultiFrames.GetToolScopesIxnAt (FrameToolScopesList, EndX, excludeProcessed: true, startIndex: 0, tol: tol);
+         var ixnTSSAtFrameEnd = PartMultiFrames.GetToolScopesIxnAt (FrameToolScopesList, EndX, 
+            excludeProcessed: true, startIndex: 0, tol: tol);
 
          //List<ToolScope<Tooling>> ixnToAdd = [];
 
@@ -397,7 +469,7 @@ namespace ProfileCAM.Core.Optimizer {
 
 
          // Allocate Heads to tooling in toolscopes
-         AllocateHeadsToToolScopes ();
+         AllocateHeadsToToolScopes (HeadType.Infer);
       }
 
       public void FindMachinableStatus () {
@@ -405,7 +477,10 @@ namespace ProfileCAM.Core.Optimizer {
             MachinableStatus = FrameMachinableStatus.Empty;
             return;
          }
-
+         if (IsHead1Job) {
+            MachinableStatus = FrameMachinableStatus.Machinable;
+            return;
+         }
          // Both exist → check global safety
          double maxH12 = FrameToolScopesH12.Max (ts => ts.EndX);
          double MinH12 = FrameToolScopesH12.Min (ts => ts.StartX);
@@ -427,6 +502,34 @@ namespace ProfileCAM.Core.Optimizer {
             return;
          }
          MachinableStatus = FrameMachinableStatus.Machinable;
+      }
+
+      public static List<ToolScope<Tooling>> GetUnprocessedToolScopes (List<ToolScope<Tooling>> tss) {
+         if (tss == null)
+            return [];
+
+         return [.. tss.Where (ts => ts != null && !ts.IsProcessed)];
+      }
+
+
+      // Returns the horizontal extent of all the frames.
+      public static double GetTotalScopesLength (List<Frame> frames) {
+         double minOfAll = 0;
+         double maxOfAll = 0;
+         foreach (var frame in frames) {
+            double maxh11 = frame.FrameToolScopesH11.Count == 0 ? 0 : frame.FrameToolScopesH11.Max (ts => ts.EndX);
+            double maxh12 = frame.FrameToolScopesH12.Count == 0 ? 0 : frame.FrameToolScopesH12.Max (ts => ts.EndX);
+            double maxh21 = frame.FrameToolScopesH21.Count == 0 ? 0 : frame.FrameToolScopesH21.Max (ts => ts.EndX);
+            double maxh22 = frame.FrameToolScopesH22.Count == 0 ? 0 : frame.FrameToolScopesH22.Max (ts => ts.EndX);
+            maxOfAll = new[] { maxh11, maxh12, maxh21, maxh22 }.Max ();
+
+            double minh11 = frame.FrameToolScopesH11.Count == 0 ? 0 : frame.FrameToolScopesH11.Min (ts => ts.EndX);
+            double minh12 = frame.FrameToolScopesH12.Count == 0 ? 0 : frame.FrameToolScopesH12.Min (ts => ts.EndX);
+            double minh21 = frame.FrameToolScopesH21.Count == 0 ? 0 : frame.FrameToolScopesH21.Min (ts => ts.EndX);
+            double minh22 = frame.FrameToolScopesH22.Count == 0 ? 0 : frame.FrameToolScopesH22.Min (ts => ts.EndX);
+            minOfAll = new[] { minh11, minh12, minh21, minh22 }.Min ();
+         }
+         return maxOfAll - minOfAll;
       }
    }
 }

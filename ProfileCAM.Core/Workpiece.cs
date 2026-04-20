@@ -1,10 +1,11 @@
 using System.ComponentModel;
 using System.Diagnostics;
-using ProfileCAM.Core.GCodeGen;
 using ProfileCAM.Core.Geometries;
 using Flux.API;
 using static System.Math;
 using static ProfileCAM.Core.MCSettings;
+using ProfileCAM.Core.GCodeGen.LCMMultipass2HLegacy;
+using ProfileCAM.Core.GCodeGen.GCodeFeatures;
 
 namespace ProfileCAM.Core {
    public class Workpiece : INotifyPropertyChanged {

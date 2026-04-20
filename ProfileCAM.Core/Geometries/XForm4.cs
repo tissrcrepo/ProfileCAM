@@ -2,8 +2,8 @@
 using MathNet.Numerics.LinearAlgebra.Double;
 using Flux.API;
 using static ProfileCAM.Core.Utils;
-using ProfileCAM.Core.GCodeGen;
 using MathNet.Numerics.LinearAlgebra.Factorization;
+using ProfileCAM.Core.GCodeGen.GCodeFeatures;
 
 namespace ProfileCAM.Core.Geometries;
 

@@ -1,13 +1,15 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using ProfileCAM.Core.Geometries;
 using ProfileCAM.Core.Processes;
+using ProfileCAM.Core.Optimizer;
 using Flux.API;
 using static ProfileCAM.Core.MCSettings;
 using static ProfileCAM.Core.Utils;
+using ProfileCAM.Core.GCodeGen.GCodeFeatures;
 
-namespace ProfileCAM.Core.GCodeGen {
+namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB {
    /// <summary>
    /// The following class parses any G Code and caches the G0 and G1 segments. Work is 
    /// still in progress to read G2 and G3 segments. The processor has to be set with 
@@ -216,7 +218,7 @@ namespace ProfileCAM.Core.GCodeGen {
       #endregion
    }
 
-   public class GCodeGenerator {
+   public class GCodeGenerator : IGCodeGenerator{
       #region Data Members
       List<E3Flex> mFlexes;      // Flexes in the workpiece
       List<E3Plane> mPlanes;     // Planes in this workpiece
@@ -248,6 +250,7 @@ namespace ProfileCAM.Core.GCodeGen {
       List<NotchAttribute> mNotchAttributes = [];
       public List<NotchAttribute> NotchAttributes { get { return mNotchAttributes; } }
       public List<MachinableCutScope> MachinableCutScopes { get; private set; }
+      //public List<List<Tooling>> Frames {  get; private set; }
       public int BlockNumber { get; set; } = 0;
       public bool CreateDummyBlock4Master { get; set; } = false;
       public string DINFileNameHead1 { get; set; }
@@ -1170,12 +1173,12 @@ namespace ProfileCAM.Core.GCodeGen {
       ///   </remarks>
       /// </param>
       /// <returns>Total tooling items (features) processed</returns>
-      public int GenerateGCode (ToolHeadType head) {
-         MachinableCutScope mccss = new (Process.Workpiece.Cuts, this);
-         if (CutScopeTraces.Count == 0) AllocateCutScopeTraces (1);
-         BlockNumber = 0;
-         return GenerateGCode (head, [mccss]);
-      }
+      //public int GenerateGCode (ToolHeadType head) {
+      //   MachinableCutScope mccss = new (Process.Workpiece.Cuts, this);
+      //   if (CutScopeTraces.Count == 0) AllocateCutScopeTraces (1);
+      //   BlockNumber = 0;
+      //   return GenerateGCode (head, [mccss]);
+      //}
 
       /// <summary>
       /// This method is an utility which allocates data structure to store
@@ -1233,6 +1236,17 @@ namespace ProfileCAM.Core.GCodeGen {
       /// <returns>The generated G Code</returns>
       /// <exception cref="Exception">Throws an exception if an error occurs during G Code generation</exception>
       public int GenerateGCode (ToolHeadType head, List<MachinableCutScope> mcCutScopes) {
+         var xPartition = mcCutScopes.Sum (cs => cs.ToolingScopesWidthH1);
+         List<List<Tooling>> frames = [];
+         foreach (var csc in mcCutScopes)
+            frames.Add (csc.Toolings);
+         var nToolingsWritten = GenerateGCode (head, frames, xPartition);
+         if (nToolingsWritten > 0)
+            MachinableCutScopes = mcCutScopes;
+         return nToolingsWritten;
+      }
+
+      public int GenerateGCode (ToolHeadType head, List<List<Tooling>> frames, double xPartition) { // List<Tooling> is One Frame
          mCutscopeToolingLengths = [];
          Head = head;
          CreateDummyBlock4Master = false;
@@ -1249,7 +1263,6 @@ namespace ProfileCAM.Core.GCodeGen {
             Directory.CreateDirectory (ncFolder);
             DINFileNameHead2 = Path.Combine (ncFolder, ncName);
          }
-
          // Initial preperatory header
          using (sw = new StreamWriter (head == 0 ? DINFileNameHead1 : DINFileNameHead2)) {
             sw.WriteLine ("%{1}({0})", ncName, ProgNo);
@@ -1258,7 +1271,7 @@ namespace ProfileCAM.Core.GCodeGen {
             sw.WriteLine ($"Job_Length = {Math.Round (Process.Workpiece.Model.Bound.XMax, 1)}");
             sw.WriteLine ($"Job_Width = {Math.Round (Process.Workpiece.Model.Bound.YMax - Process.Workpiece.Model.Bound.YMin, 1)}");
             sw.WriteLine ("Job_Height = {0}\r\nJob_Thickness = {1}", Math.Round (Process.Workpiece.Model.Bound.ZMax - Process.Workpiece.Model.Bound.ZMin, 1), Math.Round (mThickness, 1));
-            sw.WriteLine ($"X_Partition = {mcCutScopes.Sum (cs => cs.ToolingScopesWidthH1):F3}");
+            sw.WriteLine ($"X_Partition = {xPartition:F3}");
 
             // Output the outer radius
             if (JobInnerRadius.EQ (0))
@@ -1304,8 +1317,8 @@ namespace ProfileCAM.Core.GCodeGen {
             sw.WriteLine ("G61\t( Stop Block Preparation )");
             sw.WriteLine (GetGCodeApplyToolDiaCompensation ());
             sw.WriteLine (GetGCodeComment ($" Cutting with {Head} head "));
-            foreach (var csc in mcCutScopes)
-               mCutscopeToolingLengths.Add (GetTotalToolingsLength (csc.Toolings));
+            foreach (var toolings in frames)
+               mCutscopeToolingLengths.Add (GetTotalToolingsLength (toolings));
             var totalToolingsLen = mCutscopeToolingLengths.Sum ();
             string ncname = NCName;
             if (ncname.Length > 20) ncname = ncname[..20];
@@ -1330,23 +1343,24 @@ namespace ProfileCAM.Core.GCodeGen {
             mLastCutScope = false;
             BlockNumber = 1;
 
-            for (int mm = 0; mm < mcCutScopes.Count; mm++) {
+            for (int mm = 0; mm < frames.Count; mm++) {
                // CreateDummyBlock4Master Variable to signal the g code writer
                // if no G-statements is to be output, if the Slave head is
                // machining and master head is waiting from the start
                CreateDummyBlock4Master = false;
                mPrevToolingSegment = null;
-               var mcCutScope = mcCutScopes[mm];
+               var frame = frames[mm];
                cnnt++;
 
-               if (Head == ToolHeadType.Master && mm == mcCutScopes.Count - 2 && mcCutScopes[mm + 1].ToolingScopesH1.Count == 0) mLastCutScope = true;
-               else if (Head == ToolHeadType.Slave && mm == mcCutScopes.Count - 2 && mcCutScopes[mm + 1].ToolingScopesH2.Count == 0) mLastCutScope = true;
-               else if (cnnt == mcCutScopes.Count) mLastCutScope = true;
+               if (Head == ToolHeadType.Master && mm == frames.Count - 2 && frames[mm + 1].Count == 0) mLastCutScope = true;
+               else if (Head == ToolHeadType.Slave && mm == frames.Count - 2 && frames[mm + 1].Count == 0) mLastCutScope = true;
+               else if (cnnt == frames.Count) mLastCutScope = true;
 
-               Bound3 cutScopeBound = Utils.CalculateBound3 (mcCutScope.Toolings);
-               xStart = mcCutScope.StartX; xEnd = mcCutScope.EndX;
+               Bound3 cutScopeBound = Utils.CalculateBound3 (frame);
+               (xStart, xEnd) = Tooling.GetScope (frame);
+               //xStart = mcCutScope.StartX; xEnd = mcCutScope.EndX;
                if ((xEnd - xStart).SGT (MaxFrameLength)) throw new Exception ($"The Cut scope length is greater than Max Frame Length:{MaxFrameLength}, " +
-                  $"for the Cut Scope index {cnnt} starting from Tooling {mcCutScope.Toolings.First ().Name}");
+                  $"for the Cut Scope index {cnnt} starting from Tooling {frame.First ().Name}");
                mCutScopeNo++;
                mToolPos[0] = new Point3 (cutScopeBound.XMin, cutScopeBound.YMin, mSafeClearance);
                mToolPos[1] = new Point3 (cutScopeBound.XMax, cutScopeBound.YMax, mSafeClearance);
@@ -1360,8 +1374,8 @@ namespace ProfileCAM.Core.GCodeGen {
                // Allocate toolings for each head. It is assumed that partitioning is 
                // already made.
                List<Tooling> cuts = [];
-               var cutsHead1 = Utils.GetToolings4Head (mcCutScope.ToolingsHead1, (int)ToolHeadType.Master, GCodeGenSettings);
-               var cutsHead2 = Utils.GetToolings4Head (mcCutScope.ToolingsHead2, (int)ToolHeadType.Slave, GCodeGenSettings);
+               var cutsHead1 = Utils.GetToolings4Head (frame, (int)ToolHeadType.Master, GCodeGenSettings);
+               var cutsHead2 = Utils.GetToolings4Head (frame, (int)ToolHeadType.Slave, GCodeGenSettings);
                if (head == ToolHeadType.Master) cuts = cutsHead1;
                else if (head == ToolHeadType.Slave) cuts = cutsHead2;
 
@@ -1374,18 +1388,18 @@ namespace ProfileCAM.Core.GCodeGen {
                }
                if (cuts.Count == 0) continue;
 
-               WriteCuts (cuts, cutScopeBound, xStart, ref xEnd, mcCutScope, totalCuts, mCutscopeToolingLengths[mm]);
+               WriteCuts (cuts, cutScopeBound, xStart, ref xEnd, frame, totalCuts, mCutscopeToolingLengths[mm]);
             }
             // Re init Traces with first entry of CutScopeTraces
             sw.WriteLine ("\r\nN65535");
             sw.WriteLine ("EndOfJob");
             sw.WriteLine ("G99");
-            string headInfo = $"for Head{(int)Head + 1}";
-            MachinableCutScopes = mcCutScopes;
+            //string headInfo = $"for Head{(int)Head + 1}";
+            //MachinableCutScopes = mcCutScopes;
+            //Frames = frames;
             return totalCuts.Count;
          }
       }
-
       /// <summary>
       /// This method prepares to write toolings and then writes the toolings
       /// </summary>
@@ -1419,6 +1433,40 @@ namespace ProfileCAM.Core.GCodeGen {
          }
          // Compute the splitPartition
          var xPartition = GetXPartition (mcCutScope.Toolings);
+
+         // Actually write toolings to g code
+         DoWriteCuts (cuts, cutScopeBound, xStart, xPartition, xEnd, shouldOutputDigit: false, cutscopeToolingLength);
+         totalCuts.AddRange (cuts);
+
+         // Update Traces for this cutscope
+         if (CutScopeTraces[mCutScopeNo - 1][0].Count == 0)
+            CutScopeTraces[mCutScopeNo - 1][0] = mTraces[0];
+         if (CutScopeTraces[mCutScopeNo - 1][1].Count == 0)
+            CutScopeTraces[mCutScopeNo - 1][1] = mTraces[1];
+         mTraces = [[], []];
+      }
+
+      void WriteCuts (List<Tooling> cuts, Bound3 cutScopeBound, double xStart,
+         ref double xEnd, List<Tooling> frame, List<Tooling> totalCuts,
+         double cutscopeToolingLength) {
+         // GCode generation for all the eligible tooling starts here
+         xEnd = cutScopeBound.XMax;
+         foreach (var cut in cuts) {
+            var cutBound = cut.Bound3;
+            if (((double)cutBound.XMax).SGT (xEnd))
+               throw new Exception ("Tooling's XMax is more than frame feed");
+
+            // Recomputation of tool cut kind is needed to evaluate once again
+            // for LH or RH component, if only LH and RH component was changed in settings
+            // and gcode generation is intended
+            if (cut.Kind == EKind.Cutout)
+               cut.CutoutKind = Tooling.GetCutKind (cut, GetXForm ());
+            else if (cut.Kind == EKind.Notch)
+               cut.NotchKind = Tooling.GetCutKind (cut, GetXForm ());
+            cut.ProfileKind = Tooling.GetCutKind (cut, XForm4.IdentityXfm, profileKind: true);
+         }
+         // Compute the splitPartition
+         var xPartition = GetXPartition (frame);
 
          // Actually write toolings to g code
          DoWriteCuts (cuts, cutScopeBound, xStart, xPartition, xEnd, shouldOutputDigit: false, cutscopeToolingLength);
@@ -2306,8 +2354,8 @@ namespace ProfileCAM.Core.GCodeGen {
       /// from the tooling segments of the tooling item, when the segments are modified for approach 
       /// distance by adding a quarter circular arc</param>
       /// <param name="bound">The bounding box of the tooling item</param>
-      public ToolingSegment WriteTooling (List<ToolingSegment> toolingSegmentsList, Tooling toolingItem,
-         bool relativeCoords = false) {
+      public ToolingSegment? WriteTooling (List<ToolingSegment> toolingSegmentsList, Tooling toolingItem,
+         bool relativeCoords) {
          ToolingSegment ts;
          (var curve, var CurveStartNormal, _) = toolingSegmentsList[0];
          Utils.EPlane previousPlaneType = Utils.EPlane.None;
@@ -3019,7 +3067,7 @@ namespace ProfileCAM.Core.GCodeGen {
             bool toTreatAsCutOut = CutOut.ToTreatAsCutOut (toolingItem.Segs, Process.Workpiece.Bound, MinCutOutLengthThreshold);
             if ((toolingItem.IsHole () && !toTreatAsCutOut) || toolingItem.IsMark ()) {
                feature = new Hole (
-                   toolingItem, this, xStart, xEnd, xPartition, prevToolingSegs, mPrevToolingSegment, bound,
+                   toolingItem, this as IGCodeGenerator, xStart, xEnd, xPartition, prevToolingSegs, mPrevToolingSegment, bound,
                    prevCutToolingsLength, prevMarkToolingsLength, totalMarkLength, cutscopeToolingLength,
                    first, prevToolingItem, i == toolingItems.Count - 1);
             } else if (toolingItem.IsNotch () && !toolingItem.EdgeNotch) {
@@ -3031,7 +3079,7 @@ namespace ProfileCAM.Core.GCodeGen {
                   mPercentLengths = [0.5];
 
                feature = new Notch (
-                   toolingItem, bound, Process.Workpiece.Bound, this, prevToolingItem, mPrevToolingSegment,
+                   toolingItem, bound, Process.Workpiece.Bound, this as IGCodeGenerator, prevToolingItem, mPrevToolingSegment,
                    prevToolingSegs, first, previousPlaneType, xStart, xPartition, xEnd,
                    NotchWireJointDistance, NotchApproachLength, MinNotchLengthThreshold, mPercentLengths,
                    prevCutToolingsLength, cutscopeToolingLength, isWireJointsNeeded: isWireJointsNeeded,

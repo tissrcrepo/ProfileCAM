@@ -3,8 +3,9 @@ using ProfileCAM.Core.Geometries;
 using Flux.API;
 using MathNet.Numerics.Distributions;
 using static ProfileCAM.Core.Utils;
+using ProfileCAM.Core.GCodeGen.LCMMultipass2HLegacy;
 
-namespace ProfileCAM.Core.GCodeGen {
+namespace ProfileCAM.Core.GCodeGen.GCodeFeatures {
    /// <summary>
    /// This class represents the feature which is a tooling, whose curve is 
    /// closed and the curve exists on more than one plane through flex section.
@@ -12,7 +13,7 @@ namespace ProfileCAM.Core.GCodeGen {
    /// </summary>
    public class CutOut : ToolingFeature {
       #region Constructor
-      public CutOut (GCodeGenerator gcgen, Tooling toolingItem,
+      public CutOut (IGCodeGenerator gcgen, Tooling toolingItem,
          Tooling prevToolingItem, List<ToolingSegment> prevSegs, ToolingSegment? prevToolingSegment,
          EPlane prevPlaneType, double xStart, double xPartition, double xEnd, double wireJointDistance,
           double notchApproachLength, double prevCutToolingsLength, double prevMarkToolingsLength,
@@ -33,9 +34,9 @@ namespace ProfileCAM.Core.GCodeGen {
          mPrevPlane = prevPlaneType;
          mWireJointDistance = wireJointDistance;
 
-         ToolingSegments = Utils.ModifyToolingForToolDiaCompensation (toolingItem, toolingItem.Segs);
+         ToolingSegments = ModifyToolingForToolDiaCompensation (toolingItem, toolingItem.Segs);
 
-         ToolingSegments = Utils.AddLeadinToTooling (ToolingItem, ToolingSegments, GCGen, 0.5);
+         ToolingSegments = AddLeadinToTooling (ToolingItem, ToolingSegments, GCGen, 0.5);
 
          if (ToolingSegments == null || ToolingSegments.Count == 0)
             throw new Exception ("Segments accounted for entry is null");
@@ -44,25 +45,21 @@ namespace ProfileCAM.Core.GCodeGen {
       #endregion
 
       #region Properties
-      public GCodeGenerator GCGen { get; set; }
+      public IGCodeGenerator GCGen { get; set; }
       public override List<ToolingSegment> ToolingSegments { get; set; }
       public override ToolingSegment? GetMostRecentPreviousToolingSegment () => PreviousToolingSegment;
       public Tooling ToolingItem {
          get => mT;
          set {
             // Null check to avoid NullReferenceException
-            if (value == null) {
-               throw new ArgumentNullException (nameof (value), "Tooling cannot be null.");
-            }
+            if (value == null)                throw new ArgumentNullException (nameof (value), "Tooling cannot be null.");
 
             // Check if the new value is a valid Cutout
             if (!value.IsCutout () && !mFeatureToBeTreatedAsCutout)
                throw new Exception ("Not a Cutout object");
 
             // Assign value only if it's different from the current value
-            if (mT != value) {
-               mT = value;
-            }
+            if (mT != value)                mT = value;
          }
       }
       public ToolingSegment Exit { get => mExitTooling; set => mExitTooling = value; }
@@ -137,11 +134,7 @@ namespace ProfileCAM.Core.GCodeGen {
                         throw new Exception ("Cumulative WJT != Wire Joint Distance");
                      stIndex--;
                   }
-               } else {
-                  if (!mWireJointDistance.EQ (0) && Math.Abs (ToolingSegments[mCutOutBlocks[ii].StartIndex].Curve.Length - mWireJointDistance).GTEQ (0.4)) {
-                     throw new Exception ("Cumulative WJT != Wire Joint Distance");
-                  }
-               }
+               } else                   if (!mWireJointDistance.EQ (0) && Math.Abs (ToolingSegments[mCutOutBlocks[ii].StartIndex].Curve.Length - mWireJointDistance).GTEQ (0.4))                      throw new Exception ("Cumulative WJT != Wire Joint Distance");
             }
 
             // The start index of ii-th cutting block shall be lesser than or equal to ii-th end index
@@ -178,19 +171,16 @@ namespace ProfileCAM.Core.GCodeGen {
          int flexCount = 0;
          NotchSequenceSection cb;
          bool isFlexToolingFinal = false;
-         for (int ii = 0; ii < ToolingSegments.Count; ii++) {
-            if (flexSegIndices.Count > flexCount) {
+         for (int ii = 0; ii < ToolingSegments.Count; ii++)             if (flexSegIndices.Count > flexCount) {
                isFlexToolingFinal = true;
-               if (ii < flexSegIndices[flexCount].Item1) {
-                  if (startIdx == -1)
+               if (ii < flexSegIndices[flexCount].Item1)                   if (startIdx == -1)
                      startIdx = ii;
-               }
                if (ii == flexSegIndices[flexCount].Item1) {
                   if (startIdx != -1)
                      endIdx = ii - 1;
                   if (startIdx != -1 && endIdx != -1) {
                      cb = new NotchSequenceSection (startIdx, endIdx, NotchSectionType.MachineToolingForward) {
-                        Flange = Utils.GetArcPlaneFlangeType (ToolingSegments[ii].Vec0, GCGen.GetXForm ())
+                        Flange = GetArcPlaneFlangeType (ToolingSegments[ii].Vec0, GCGen.GetXForm ())
                      };
                      mCutOutBlocks.Add (cb);
                      startIdx = flexSegIndices[flexCount].Item1;
@@ -202,7 +192,7 @@ namespace ProfileCAM.Core.GCodeGen {
                      endIdx = ii;
                   if (startIdx != -1 && endIdx != -1) {
                      cb = new NotchSequenceSection (startIdx, endIdx, NotchSectionType.MachineFlexToolingForward) {
-                        Flange = Utils.GetArcPlaneFlangeType (ToolingSegments[ii].Vec0, GCGen.GetXForm ())
+                        Flange = GetArcPlaneFlangeType (ToolingSegments[ii].Vec0, GCGen.GetXForm ())
                      };
                      mCutOutBlocks.Add (cb);
                      endIdx = -1;
@@ -210,20 +200,17 @@ namespace ProfileCAM.Core.GCodeGen {
                   }
                   flexCount++;
                }
-            } else {
-               if (startIdx == -1) {
+            } else                if (startIdx == -1) {
                   startIdx = ii;
                   isFlexToolingFinal = false;
                }
-            }
-         }
          endIdx = ToolingSegments.Count - 1;
          if (isFlexToolingFinal)
             cb = new NotchSequenceSection (startIdx, endIdx, NotchSectionType.MachineFlexToolingForward);
          else
             cb = new NotchSequenceSection (startIdx, endIdx, NotchSectionType.MachineToolingForward);
 
-         cb.Flange = Utils.GetArcPlaneFlangeType (ToolingSegments[^1].Vec0, GCGen.GetXForm ());
+         cb.Flange = GetArcPlaneFlangeType (ToolingSegments[^1].Vec0, GCGen.GetXForm ());
          mCutOutBlocks.Add (cb);
          CheckSanityOfCutOutBlocks ();
       }
@@ -255,13 +242,11 @@ namespace ProfileCAM.Core.GCodeGen {
                else if (nextBlockStartMc)
                   mcBlockEndIndex = mCutOutBlocks[ii].EndIndex;
                bool revTrace = false;
-               if (nextBlockStartFlexMc) {
-                  revTrace = true;
-               }
+               if (nextBlockStartFlexMc)                   revTrace = true;
                var (wjtPtAtFlex, segIndexToSplit) = Geom.EvaluatePointAndIndexAtLength (ToolingSegments, mcBlockEndIndex,
                   wjtLenAtFlex, reverseTrace: revTrace);
 
-               var splitToolSegs = Utils.SplitToolingSegmentsAtPoint (ToolingSegments, segIndexToSplit, wjtPtAtFlex,
+               var splitToolSegs = SplitToolingSegmentsAtPoint (ToolingSegments, segIndexToSplit, wjtPtAtFlex,
                ToolingSegments[segIndexToSplit].Vec0.Normalized ());
                // TEST_CODE CHANGE_CHANGE
                var wjtDist = ToolingSegments[mCutOutBlocks[ii].EndIndex].Curve.End.DistTo (wjtPtAtFlex);
@@ -276,11 +261,10 @@ namespace ProfileCAM.Core.GCodeGen {
                   NotchSequenceSection cb;
                   if (nextBlockStartFlexMc) {
                      cb = new NotchSequenceSection (segIndexToSplit + 1, segIndexToSplit + 1, NotchSectionType.WireJointTraceJumpForwardOnFlex) {
-                        Flange = Utils.GetArcPlaneFlangeType (ToolingSegments[mcBlockEndIndex].Vec0.Normalized (), XForm4.IdentityXfm)
+                        Flange = GetArcPlaneFlangeType (ToolingSegments[mcBlockEndIndex].Vec0.Normalized (), XForm4.IdentityXfm)
                      };
                      mCutOutBlocks.Insert (ii + 1, cb);
-                  } else if (nextBlockStartMc) {
-                     if (mCutOutBlocks[ii].EndIndex != segIndexToSplit - 1) {
+                  } else if (nextBlockStartMc)                      if (mCutOutBlocks[ii].EndIndex != segIndexToSplit - 1) {
                         multiSegsWithinWJT = true;
                         var startPt = ToolingSegments[mCutOutBlocks[ii].EndIndex].Curve.End;
                         var startNormal = ToolingSegments[mCutOutBlocks[ii].EndIndex].Vec1;
@@ -305,12 +289,12 @@ namespace ProfileCAM.Core.GCodeGen {
                         // The wire joint segment in ToolingSegments with "mCutOutBlocks[ii].EndIndex + 1" -th seg 
                         // is the wire joint segment.
                         cb = new NotchSequenceSection (mCutOutBlocks[ii].EndIndex + 1, mCutOutBlocks[ii].EndIndex + 1, NotchSectionType.WireJointTraceJumpForwardOnFlex) {
-                           Flange = Utils.GetArcPlaneFlangeType (endNormal, XForm4.IdentityXfm)
+                           Flange = GetArcPlaneFlangeType (endNormal, XForm4.IdentityXfm)
                         };
                         mCutOutBlocks.Insert (ii + 1, cb);
 
                         // No of segments to be removed
-                        var nsegsToRemove = segIndexToSplit - (mCutOutBlocks[ii].EndIndex);
+                        var nsegsToRemove = segIndexToSplit - mCutOutBlocks[ii].EndIndex;
 
                         // Remove the segments
                         int toolSegsRemovedCount = 0;
@@ -336,20 +320,17 @@ namespace ProfileCAM.Core.GCodeGen {
                         // Modify the toolingsegments indices in the mCutOutBlocks
                      } else {
                         cb = new NotchSequenceSection (segIndexToSplit, segIndexToSplit, NotchSectionType.WireJointTraceJumpForwardOnFlex) {
-                           Flange = Utils.GetArcPlaneFlangeType (ToolingSegments[mcBlockEndIndex].Vec0.Normalized (), XForm4.IdentityXfm)
+                           Flange = GetArcPlaneFlangeType (ToolingSegments[mcBlockEndIndex].Vec0.Normalized (), XForm4.IdentityXfm)
                         };
                         mCutOutBlocks.Insert (ii + 1, cb);
                      }
-                  }
 
-                  if (multiSegsWithinWJT == false) {
-                     for (int jj = ii + 2; jj < mCutOutBlocks.Count; jj++) {
+                  if (multiSegsWithinWJT == false)                      for (int jj = ii + 2; jj < mCutOutBlocks.Count; jj++) {
                         var cutoutblk = mCutOutBlocks[jj];
                         cutoutblk.StartIndex += 1;
                         cutoutblk.EndIndex += 1;
                         mCutOutBlocks[jj] = cutoutblk;
                      }
-                  }
                }
             }
          }
@@ -372,14 +353,12 @@ namespace ProfileCAM.Core.GCodeGen {
 
          // condition to introduce wire joints on web flange
          bool toIntroduceWJT = false;
-         var segBounds = Utils.GetToolingSegmentsBounds (segs, fullPartBound);
-         var yMax = (double)(segBounds.YMax); var yMin = (double)(segBounds.YMin);
+         var segBounds = GetToolingSegmentsBounds (segs, fullPartBound);
+         var yMax = (double)segBounds.YMax; var yMin = (double)segBounds.YMin;
          var ySpan = yMax - yMin;
          if (Math.Abs (ySpan).GTEQ (2 * minCutOutLengthThreshold)) {
-            foreach (var seg in segs) {
-               if (Utils.GetArcPlaneFlangeType (seg.Vec0, XForm4.IdentityXfm) != EFlange.Web)
+            foreach (var seg in segs)                if (GetArcPlaneFlangeType (seg.Vec0, XForm4.IdentityXfm) != EFlange.Web)
                   return false;
-            }
             toIntroduceWJT = true;
          }
          return toIntroduceWJT;
@@ -441,13 +420,11 @@ namespace ProfileCAM.Core.GCodeGen {
             // Calculate distance
             Point3 modStartPoint;
             double dist;
-            if (ToolingSegments.Count == 2 && Utils.IsCircle (ToolingSegments[eEndIdx].Curve)) {
+            if (ToolingSegments.Count == 2 && IsCircle (ToolingSegments[eEndIdx].Curve)) {
                modStartPoint = ToolingSegments[eEndIdx].Curve.Start;
                dist = ToolingSegments[eEndIdx].Curve.Length;
                dist += ToolingSegments[eStIdx].Curve.Length;
-            } else {
-               dist = Geom.GetLengthBetween (ToolingSegments, StPoint, EndPoint, inSameOrder: true);
-            }
+            } else                dist = Geom.GetLengthBetween (ToolingSegments, StPoint, EndPoint, inSameOrder: true);
             distances.Add (dist);
 
             // Populate points
@@ -468,7 +445,7 @@ namespace ProfileCAM.Core.GCodeGen {
             else stPt = preWJTPts[ii - 1];
             var d = Geom.GetLengthBetween (ToolingSegments, stPt, preWJTPts[ii], inSameOrder: true);
 
-            var splitToolSegs = Utils.SplitToolingSegmentsAtPoint (ToolingSegments, segIndexToSplit, preWJTPts[ii],
+            var splitToolSegs = SplitToolingSegmentsAtPoint (ToolingSegments, segIndexToSplit, preWJTPts[ii],
                                        ToolingSegments[segIndexToSplit].Vec0.Normalized ());
             if (splitToolSegs.Count == 2) {
                var cutoutSegs = ToolingSegments;
@@ -496,7 +473,7 @@ namespace ProfileCAM.Core.GCodeGen {
                   mCutOutBlocks[kk] = cutoutblk;
                }
             }
-            mPreWJTPts.Add ((preWJTPts[ii]));
+            mPreWJTPts.Add (preWJTPts[ii]);
             CheckSanityOfCutOutBlocks ();
          }
          CheckSanityOfCutOutBlocks ();
@@ -506,15 +483,14 @@ namespace ProfileCAM.Core.GCodeGen {
          // ** Compute Pre Wire Joint Points on the tooling segments
          //var tLen = ToolingItem.Length;
          ComputePreWireJointPoints ();
-         for (int ii = 0; ii < mPreWJTPts.Count; ii++) {
-            for (int jj = 0; jj < mCutOutBlocks.Count; jj++) {
+         for (int ii = 0; ii < mPreWJTPts.Count; ii++)             for (int jj = 0; jj < mCutOutBlocks.Count; jj++) {
                var preWJTPtIndex = ToolingSegments.FindIndex (t => t.Curve.End.EQ (mPreWJTPts[ii]));
                if (preWJTPtIndex == -1) throw new Exception ("The index of pre wire joint point in tooling segments is -1");
 
                if (mCutOutBlocks[jj].StartIndex <= preWJTPtIndex && preWJTPtIndex <= mCutOutBlocks[jj].EndIndex &&
                   mCutOutBlocks[jj].SectionType == NotchSectionType.MachineToolingForward) {
                   var (wjtPt, segIndexToSplit) = Geom.GetPointAtLengthFrom (mPreWJTPts[ii], GCGen.NotchWireJointDistance, ToolingSegments);
-                  var splitToolSegs = Utils.SplitToolingSegmentsAtPoint (ToolingSegments, segIndexToSplit, wjtPt,
+                  var splitToolSegs = SplitToolingSegmentsAtPoint (ToolingSegments, segIndexToSplit, wjtPt,
                                        ToolingSegments[segIndexToSplit].Vec0.Normalized ());
                   if (splitToolSegs.Count == 2) {
 
@@ -582,7 +558,6 @@ namespace ProfileCAM.Core.GCodeGen {
                   break;
                }
             }
-         }
       }
 
       List<double> mDistances = [];
@@ -600,16 +575,14 @@ namespace ProfileCAM.Core.GCodeGen {
             if (segIndexToSplit == -1 || segIndexToSplit < startIndex) break;
             double dist;
             try {
-               var isCircle = Utils.IsCircle (ToolingSegments[segIndexToSplit].Curve);
+               var isCircle = IsCircle (ToolingSegments[segIndexToSplit].Curve);
                dist = Geom.GetLengthBetween (ToolingSegments, iPoint, preWJTPt, inSameOrder: true);
                mDistances.Add (dist);
             } catch (Exception) { break; }
-            if (segIndexToSplit == -1 || segIndexToSplit > endIndex) {
-               if (segIndexToSplit == -1)
+            if (segIndexToSplit == -1 || segIndexToSplit > endIndex)                if (segIndexToSplit == -1)
                   throw new Exception ("In PopulatePreWJTPts: Segment Index to split is -1");
                else
                   throw new Exception ("In PopulatePreWJTPts: segIndexToSplit > endIndex");
-            }
             points.Add (preWJTPt);
          }
       }
@@ -630,13 +603,11 @@ namespace ProfileCAM.Core.GCodeGen {
       #endregion
 
       static void CheckToolingSegs (List<ToolingSegment> tss) {
-         for (int ii = 1; ii < tss.Count; ii++) {
-            if (!tss[ii].Curve.Start.EQ (tss[ii - 1].Curve.End)) {
+         for (int ii = 1; ii < tss.Count; ii++)             if (!tss[ii].Curve.Start.EQ (tss[ii - 1].Curve.End)) {
                var ts1 = Geom.CreateToolingSegmentForCurve (new FCLine3 (tss[ii - 1].Curve.End, tss[ii].Curve.Start), tss[ii - 1].Vec1, tss[ii].Vec0);
                tss.Insert (ii, ts1);
                ii--;
             }
-         }
       }
       #region G Code Writers
       public override void WriteTooling () {
@@ -656,7 +627,7 @@ namespace ProfileCAM.Core.GCodeGen {
 
                case NotchSectionType.WireJointTraceJumpForward:
                   if (ii == 0) throw new Exception ("CutOut writing starts from Wire Joint Jump Trace, which is wrong");
-                  Vector3 scrapSideNormal = Utils.GetMaterialRemovalSideDirection (ToolingSegments[cutoutSequence.StartIndex],
+                  Vector3 scrapSideNormal = GetMaterialRemovalSideDirection (ToolingSegments[cutoutSequence.StartIndex],
                      ToolingSegments[cutoutSequence.StartIndex].Curve.End, EKind.Cutout, ToolingItem.ProfileKind);
                   string comment;
                   if (cutoutSequence.SectionType == NotchSectionType.WireJointTraceJumpForward)
@@ -671,12 +642,12 @@ namespace ProfileCAM.Core.GCodeGen {
 
                   //bool isNextSeqFlexMc = (ii + 1 < mCutOutBlocks.Count && mCutOutBlocks[ii + 1].SectionType == NotchSectionType.MachineFlexToolingForward);
                   //bool isPrevSeqFlexMc = (ii - 1 >= 0 && mCutOutBlocks[ii - 1].SectionType == NotchSectionType.MachineFlexToolingForward);
-                  EFlange flangeType = Utils.GetArcPlaneFlangeType (wjtTS.Vec1, GCGen.GetXForm ());
+                  EFlange flangeType = GetArcPlaneFlangeType (wjtTS.Vec1, GCGen.GetXForm ());
 
                   //if (isNextSeqFlexMc && cutoutSequence.SectionType != NotchSectionType.WireJointTraceJumpForwardOnFlex)
                   //   throw new Exception ("next seq is flex cut but current seq type is not NotchSectionType.WireJointTraceJumpForwardOnFlex");
 
-                  mFlexStartRef = Utils.GetMachiningSegmentPostWJT (wjtTS, scrapSideNormal, GCGen.Process.Workpiece.Bound, NotchApproachLength);
+                  mFlexStartRef = GetMachiningSegmentPostWJT (wjtTS, scrapSideNormal, GCGen.Process.Workpiece.Bound, NotchApproachLength);
                   // Here it is assumed that if the next sequence block is machining on flex, in which case,
                   // the current sequence type is WireJointTraceJumpForwardOnFlex, the tooling block 
                   // shall be completed and so toCompleteToolingBlock is true, false otherwise
@@ -726,7 +697,7 @@ namespace ProfileCAM.Core.GCodeGen {
                         GCGen.InitializeNotchToolingBlock (ToolingItem, prevToolingItem: null, ToolingSegments,
                            ToolingSegments[cutoutSequence.StartIndex].Vec0, mXStart, mXPartition, mXEnd, isFlexCut: false, ii == mCutOutBlocks.Count - 1,
                            /*isToBeTreatedAsCutOut: mFeatureToBeTreatedAsCutout,*/ isValidNotch: false, cutoutSequence.StartIndex, cutoutSequence.EndIndex,
-                           comment: "CutOutSequence: Machining Forward Direction");
+                           refSegIndex: 0, comment: "CutOutSequence: Machining Forward Direction", isShortPerimeterNotch: false, nextTs: null);
                      } else {
                         string titleComment = GCodeGenerator.GetGCodeComment ("CutOutSequence: Machining Forward Direction");
                         GCGen.WriteLineStatement (titleComment);
@@ -734,9 +705,10 @@ namespace ProfileCAM.Core.GCodeGen {
                      if (ii == 0) {
                         cutoutEntry = Tuple.Create (ToolingSegments[0].Curve.Start, ToolingSegments[0].Vec0);
                         GCGen.PrepareforToolApproach (ToolingItem, ToolingSegments, PreviousToolingSegment, mPrevToolingItem,
-                           mPrevToolingSegs, mIsFirstTooling, isValidNotch: false, cutoutEntry);
+                           mPrevToolingSegs, mIsFirstTooling, isValidNotch: false, notchEntry:cutoutEntry);
                         if (!GCGen.RapidMoveToPiercingPositionWithPingPong)
-                           GCGen.RapidMoveToPiercingPosition (ToolingSegments[0].Curve.Start, ToolingSegments[0].Vec0, EKind.Cutout, usePingPongOption: true);
+                           GCGen.RapidMoveToPiercingPosition (ToolingSegments[0].Curve.Start, ToolingSegments[0].Vec0, 
+                              EKind.Cutout, usePingPongOption: true, comment:"");
                      }
                      if (!continueMachining) {
                         GCGen.RapidMoveToPiercingPositionWithPingPong = false;
@@ -744,10 +716,10 @@ namespace ProfileCAM.Core.GCodeGen {
                            cutoutEntry = Tuple.Create (ToolingSegments[0].Curve.Start, ToolingSegments[0].Vec0);
                            GCGen.MoveToMachiningStartPosition (cutoutEntry.Item1, cutoutEntry.Item2, ToolingItem.Name);
                         }
-                        var isFromWebFlange = Utils.IsMachiningFromWebFlange (ToolingSegments, cutoutSequence.StartIndex);
+                        var isFromWebFlange = IsMachiningFromWebFlange (ToolingSegments, cutoutSequence.StartIndex);
                         GCGen.WriteToolCorrectionData (ToolingItem);
                         GCGen.RapidMoveToPiercingPosition (ToolingSegments[cutoutSequence.StartIndex].Curve.Start,
-                              ToolingSegments[cutoutSequence.StartIndex].Vec0, EKind.Cutout, usePingPongOption: false);
+                              ToolingSegments[cutoutSequence.StartIndex].Vec0, EKind.Cutout, usePingPongOption: false, comment:"");
 
                         GCGen.WritePlaneForCircularMotionCommand (isFromWebFlange, isNotchCut: true);
                         GCGen.WriteToolDiaCompensation (isFlexTooling: false);
@@ -755,7 +727,7 @@ namespace ProfileCAM.Core.GCodeGen {
                      }
                      for (int jj = cutoutSequence.StartIndex; jj <= cutoutSequence.EndIndex; jj++) {
                         mExitTooling = ToolingSegments[jj];
-                        GCGen.WriteCurve (ToolingSegments[jj], ToolingItem.Name);
+                        GCGen.WriteCurve (ToolingSegments[jj], ToolingItem.Name, relativeCoords: false, refStPt: null);
                         mBlockCutLength += ToolingSegments[jj].Curve.Length;
                      }
                      PreviousToolingSegment = ToolingSegments[cutoutSequence.EndIndex];
@@ -827,7 +799,7 @@ namespace ProfileCAM.Core.GCodeGen {
                case NotchSectionType.WireJointTraceJumpForward:
                case NotchSectionType.WireJointTraceJumpForwardOnFlex:
                   if (ii == 0) throw new Exception ("CutOut writing starts from Wire Joint Jump Trace, which is wrong");
-                  Vector3 scrapSideNormal = Utils.GetMaterialRemovalSideDirection (ToolingSegments[cutoutSequence.StartIndex],
+                  Vector3 scrapSideNormal = GetMaterialRemovalSideDirection (ToolingSegments[cutoutSequence.StartIndex],
                      ToolingSegments[cutoutSequence.StartIndex].Curve.End, EKind.Cutout, ToolingItem.ProfileKind);
                   string comment;
                   if (cutoutSequence.SectionType == NotchSectionType.WireJointTraceJumpForward)
@@ -840,13 +812,13 @@ namespace ProfileCAM.Core.GCodeGen {
                      comment = "** Dual Flange Notch: WJT Reverse Direction ** ))";
                   }
 
-                  bool isNextSeqFlexMc = (ii + 1 < mCutOutBlocks.Count && mCutOutBlocks[ii + 1].SectionType == NotchSectionType.MachineFlexToolingForward);
-                  bool isPrevSeqFlexMc = (ii - 1 >= 0 && mCutOutBlocks[ii - 1].SectionType == NotchSectionType.MachineFlexToolingForward);
-                  EFlange flangeType = Utils.GetArcPlaneFlangeType (wjtTS.Vec1, GCGen.GetXForm ());
+                  bool isNextSeqFlexMc = ii + 1 < mCutOutBlocks.Count && mCutOutBlocks[ii + 1].SectionType == NotchSectionType.MachineFlexToolingForward;
+                  bool isPrevSeqFlexMc = ii - 1 >= 0 && mCutOutBlocks[ii - 1].SectionType == NotchSectionType.MachineFlexToolingForward;
+                  EFlange flangeType = GetArcPlaneFlangeType (wjtTS.Vec1, GCGen.GetXForm ());
                   if (isNextSeqFlexMc && cutoutSequence.SectionType != NotchSectionType.WireJointTraceJumpForwardOnFlex)
                      throw new Exception ("next seq is flex cut but current seq type is not NotchSectionType.WireJointTraceJumpForwardOnFlex");
 
-                  mFlexStartRef = Utils.GetMachiningSegmentPostWJT (wjtTS, scrapSideNormal, GCGen.Process.Workpiece.Bound, NotchApproachLength);
+                  mFlexStartRef = GetMachiningSegmentPostWJT (wjtTS, scrapSideNormal, GCGen.Process.Workpiece.Bound, NotchApproachLength);
                   if (mMostRecentPrevToolPosition == null)
                      throw new Exception ($"Cutout.WriteTooling: {cutoutSequence.SectionType}, index-{ii} Most recent prev tool absolute position is null");
 
@@ -906,20 +878,20 @@ namespace ProfileCAM.Core.GCodeGen {
                         GCGen.InitializeNotchToolingBlock (ToolingItem, prevToolingItem: null, ToolingSegments,
                            ToolingSegments[cutoutSequence.StartIndex].Vec0, mXStart, mXPartition, mXEnd, isFlexCut: false, ii == mCutOutBlocks.Count - 1,
                            /*isToBeTreatedAsCutOut: mFeatureToBeTreatedAsCutout,*/ isValidNotch: false, cutoutSequence.StartIndex, cutoutSequence.EndIndex,
-                           comment: "CutOutSequence: Machining Forward Direction");
+                           refSegIndex: 0, comment: "CutOutSequence: Machining Forward Direction", isShortPerimeterNotch: false, nextTs: null);
 
                         cutoutEntry = Tuple.Create (ToolingSegments[cutoutSequence.StartIndex].Curve.Start,
                            ToolingSegments[cutoutSequence.StartIndex].Vec0);
                         if (ii == 0) {
                            GCGen.PrepareforToolApproach (ToolingItem, ToolingSegments, PreviousToolingSegment, mPrevToolingItem,
-                              mPrevToolingSegs, mIsFirstTooling, isValidNotch: false, cutoutEntry);
+                              mPrevToolingSegs, mIsFirstTooling, isValidNotch: false, notchEntry:cutoutEntry);
                            GCGen.MoveToMachiningStartPosition (cutoutEntry.Item1, cutoutEntry.Item2, ToolingItem.Name);
-                           GCGen.RapidMoveToPiercingPosition (ToolingSegments[0].Curve.Start, ToolingSegments[0].Vec0, EKind.Cutout, usePingPongOption: true);
+                           GCGen.RapidMoveToPiercingPosition (ToolingSegments[0].Curve.Start, ToolingSegments[0].Vec0, EKind.Cutout, usePingPongOption: true, comment: "");
                         }
 
                         //GCGen.WriteLineStatement ("ToolPlane\t( Confirm Cutting Plane )");
 
-                        var isFromWebFlange = Utils.IsMachiningFromWebFlange (ToolingSegments, cutoutSequence.StartIndex);
+                        var isFromWebFlange = IsMachiningFromWebFlange (ToolingSegments, cutoutSequence.StartIndex);
                         ////GCGen.PrepareforToolApproach (ToolingItem, ToolingSegments, PreviousToolingSegment, mPrevToolingItem,
                         ////   mPrevToolingSegs, mIsFirstTooling, isValidNotch: false, cutoutEntry);
                         //GCGen.RapidMoveToPiercingPosition (ToolingSegments[cutoutSequence.StartIndex].Curve.Start,
@@ -972,15 +944,15 @@ namespace ProfileCAM.Core.GCodeGen {
                            isValidNotch: false,
                            cutoutSequence.StartIndex,
                            cutoutSequence.EndIndex, refSegIndex: cutoutSequence.StartIndex,
-                           "CutOutSequence: Flex machining Forward Direction");
+                           "CutOutSequence: Flex machining Forward Direction", isShortPerimeterNotch: false, nextTs: null);
                         GCGen.WriteLineStatement (GCodeGenerator.GetGCodeComment ("CutOutSequence: Machining in Flex in Forward Direction"));
-                        var isFromWebFlange = Utils.IsMachiningFromWebFlange (ToolingSegments, cutoutSequence.StartIndex);
+                        var isFromWebFlange = IsMachiningFromWebFlange (ToolingSegments, cutoutSequence.StartIndex);
                         GCGen.WriteLineStatement ("ToolPlane\t( Confirm Cutting Plane )");
 
                         cutoutEntry = Tuple.Create (ToolingSegments[cutoutSequence.StartIndex].Curve.Start,
                            ToolingSegments[cutoutSequence.StartIndex].Vec0);
                         GCGen.RapidMoveToPiercingPosition (ToolingSegments[cutoutSequence.StartIndex].Curve.Start,
-                           ToolingSegments[cutoutSequence.StartIndex].Vec0, EKind.Cutout, usePingPongOption: true);
+                           ToolingSegments[cutoutSequence.StartIndex].Vec0, EKind.Cutout, usePingPongOption: true, comment: "");
                         //GCGen.MoveToMachiningStartPosition (cutoutEntry.Item1, cutoutEntry.Item2, ToolingItem.Name);
                         mMostRecentPrevToolPosition = ToolingSegments[cutoutSequence.StartIndex].Curve.Start;
 
@@ -1002,7 +974,7 @@ namespace ProfileCAM.Core.GCodeGen {
                            throw new Exception ("Error mFlexStartRef = null");
                         for (int jj = cutoutSequence.StartIndex; jj <= cutoutSequence.EndIndex; jj++) {
                            GCGen.WriteFlexLineSeg (ToolingSegments[jj],
-                           isWJTStartCut: false, ToolingItem.Name, flexRefSeg: mFlexStartRef);
+                           isWJTStartCut: false, ToolingItem.Name, flexRefSeg: mFlexStartRef, lineSegmentComment:"");
                            mExitTooling = ToolingSegments[jj];
                            mBlockCutLength += ToolingSegments[jj].Curve.Length;
                            PreviousToolingSegment = ToolingSegments[jj];

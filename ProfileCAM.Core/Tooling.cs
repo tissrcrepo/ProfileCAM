@@ -1,8 +1,10 @@
 ﻿using System.Diagnostics;
 using System.Security.Cryptography;
-using ProfileCAM.Core.GCodeGen;
 using ProfileCAM.Core.Geometries;
 using Flux.API;
+using ProfileCAM.Core.Optimizer;
+using ProfileCAM.Core.GCodeGen.LCMMultipass2HLegacy;
+using ProfileCAM.Core.GCodeGen.GCodeFeatures;
 
 namespace ProfileCAM.Core;
 public readonly struct PointVec {
@@ -665,5 +667,31 @@ public class Tooling {
             len += seg.Curve.Length;
          return len;
       }
+   }
+
+   public static (double minStartX, double maxEndX) GetScope (List<Tooling> toolings) {
+      if (toolings == null || toolings.Count == 0)
+         return (0.0, 0.0);
+
+      double minStartX = double.MaxValue;
+      double maxEndX = double.MinValue;
+      bool hasAnyPoint = false;
+
+      foreach (var tooling in toolings) {
+         foreach (var seg in tooling.Segs) {
+            var curve = seg.Curve;
+            if (curve != null) {
+               double startX = curve.Start.X;
+               double endX = curve.End.X;
+
+               if (startX < minStartX) minStartX = startX;
+               if (endX > maxEndX) maxEndX = endX;
+
+               hasAnyPoint = true;
+            }
+         }
+      }
+
+      return hasAnyPoint ? (minStartX, maxEndX) : (0.0, 0.0);
    }
 }

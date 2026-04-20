@@ -69,5 +69,13 @@ public class ToolScope<T> where T : Tooling {
       return clone;
    }
 
-   public double Length => Math.Abs (StartX - EndX);
+   public double Scope => Math.Abs (StartX - EndX);
+
+   public double Length => Tooling.Length;
+
+   
+
+   //public static double ScopeLength (List<ToolScope<Tooling>> tss) {
+   //   return tss?.Sum (ts => ts.Length ?? 0.0) ?? 0.0;
+   //}
 }

@@ -1,11 +1,11 @@
 ﻿using System.ComponentModel;
 using System.Windows.Threading;
 using ProfileCAM.Core;
-using ProfileCAM.Core.GCodeGen;
 using ProfileCAM.Core.Geometries;
 using ProfileCAM.Core.Processes;
 using ProfileCAM.Core.Tools;
 using Flux.API;
+using ProfileCAM.Core.GCodeGen.LCMMultipass2HLegacy;
 
 
 namespace ProfileCAM.Presentation.Draw {

@@ -15,7 +15,7 @@ namespace ProfileCAM.Core.Optimizer {
                 eIndex,
                 tol: tol);
 
-         var bound = Utils.GetBounds (ToolScopesList);
+         var bound = Utils.GetScope (ToolScopesList);
          if (bound != null) {
             StartX = bound.Value.MinStartX;
             EndX = bound.Value.MaxEndX;

@@ -1,9 +1,10 @@
 ﻿using Flux.API;
 using ProfileCAM.Core.Geometries;
-using ProfileCAM.Core.GCodeGen;
 using System.Collections.Generic;
 using static Flux.Sheaf;
 using System.Windows.Input;
+using System;
+using ProfileCAM.Core.GCodeGen.LCMMultipass2HLegacy;
 
 namespace ProfileCAM.Core.Optimizer;
 #nullable enable
@@ -60,6 +61,7 @@ public class PartMultiFrames {
 
       // Sort by StartX
       ToolScopesBySxList = [.. AllToolScopes.OrderBy (ts => ts.StartX)];
+      ToolScopesByExList = [.. AllToolScopes.OrderBy (ts => ts.EndX)];
 
       for (int ii = 0; ii < ToolScopesList.Count; ii++)
          ToolScopesList[ii].IndexSx = ii;
@@ -73,79 +75,98 @@ public class PartMultiFrames {
    }
 
    void PopulateDictionaries (List<ToolScope<Tooling>> tss, bool excludedProcessed = true) {
+      // Define your file path
+      string filePath = @"C:\temp\ProfileCAM\Dictionary.txt";
 
-      CandidateFrames1.Clear ();
-      CandidateFrames2.Clear ();
-      //ToolScopesBySx = new (tss);
+      // Ensure directory exists (creates if not found)
+      string? directory = Path.GetDirectoryName (filePath);
+      if (!string.IsNullOrEmpty (directory)) {
+         Directory.CreateDirectory (directory);
+      }
+      using (var writer = new StreamWriter (filePath)) {
 
-      // Sort by EndX
-      //tss = [.. tss.OrderBy (ts => ts.StartX)];
+         CandidateFrames1.Clear ();
+         CandidateFrames2.Clear ();
+         //ToolScopesBySx = new (tss);
 
-      int firstUnprocessedIndex;
-      if (excludedProcessed)
-         firstUnprocessedIndex = tss.FindIndex (ts => !ts.IsProcessed);
-      else
-         firstUnprocessedIndex = 0;
+         // Sort by EndX
+         //tss = [.. tss.OrderBy (ts => ts.StartX)];
 
-      for (int ii = firstUnprocessedIndex; ii < tss.Count; ii++) {
-         int lastJj = -1;
+         int firstUnprocessedIndex;
+         if (excludedProcessed)
+            firstUnprocessedIndex = tss.FindIndex (ts => !ts.IsProcessed);
+         else
+            firstUnprocessedIndex = 0;
 
-         double ii_thSx = tss[ii].StartX;
-         double ii_thEndX = tss[ii].EndX;
+         for (int ii = firstUnprocessedIndex; ii < tss.Count; ii++) {
+            int lastJj = -1;
 
-         for (int jj = firstUnprocessedIndex; jj < tss.Count; jj++) {
-            // If the toolscopes pointed to by both ii and jj are the same, continue
-            if (tss[ii] == tss[jj] || tss[jj].IsProcessed)
-               continue;
+            double ii_thSx = tss[ii].StartX;
+            double ii_thEndX = tss[ii].EndX;
 
-            double jj_thSx = tss[jj].StartX;
-            double jj_thEndX = tss[jj].EndX;
+            bool cfEntryAdded = false;
+            int jj;
+            for (jj = firstUnprocessedIndex; jj < tss.Count; jj++) {
+               // If the toolscopes pointed to by both ii and jj are the same, continue
+               if (tss[ii] == tss[jj] || (tss[jj].IsProcessed && excludedProcessed))
+                  continue;
+
+               double jj_thSx = tss[jj].StartX;
+               double jj_thEndX = tss[jj].EndX;
 
 
 
-            // Ignore the toolscopes of previous frames
-            if (jj_thEndX.LTEQ (ii_thSx) || jj_thSx.SLT (ii_thSx))
-               continue;
+               // Ignore the toolscopes of previous frames
+               if (jj_thEndX.LTEQ (ii_thSx) || jj_thSx.SLT (ii_thSx))
+                  continue;
 
-            var scope = jj_thEndX - ii_thSx;
-            // The frame scope should at least be MinFrameLength wide
-            if (scope.SLT (MinFrameLength))
-               continue;
+               var scope = jj_thEndX - ii_thSx;
+               // The frame scope should at least be MinFrameLength wide
+               if (scope.SLT (MinFrameLength))
+                  continue;
 
-            // If the scope is more than MaxFL break this loop
-            if (scope.SGT (MaxFrameLength))
-               break;
+               // If the scope is more than MaxFL break this loop
+               if (scope.SGT (MaxFrameLength))
+                  break;
 
-            // Terminating criterion:
-            if ((jj_thSx - ii_thSx).SGT (MaxFrameLength))
-               break;
+               // Terminating criterion:
+               if ((jj_thSx - ii_thSx).SGT (MaxFrameLength))
+                  break;
 
-            var cf = new CandidateFrame (tss, ii, jj, Tol);
+               var cf = new CandidateFrame (tss, ii, jj, Tol);
 
-            CandidateFrames1[(ii, jj)] = cf;
-            int key = ii; // or whatever your key value is
+               CandidateFrames1[(ii, jj)] = cf;
+               int key = ii; // or whatever your key value is
 
-            if (!CandidateFrames2.TryGetValue (key, out var value)) {
-               value = [];  // Create a new empty list
-               CandidateFrames2[key] = value;  // Add it to the dictionary
+               if (!CandidateFrames2.TryGetValue (key, out var value)) {
+                  value = [];  // Create a new empty list
+                  CandidateFrames2[key] = value;  // Add it to the dictionary
+               }
+
+               value.Add ((jj, cf));
+
+               lastJj = jj; // track last valid jj for THIS ii
+               cfEntryAdded = true;
+               writer.WriteLine ($"ii {ii}\t jj {jj} Scope Length = {scope} ToolScopes {value.Count}");
             }
 
-            value.Add ((jj, cf));
+            if (jj == tss.Count && !cfEntryAdded) {
+               int aa = 0;
+               ++aa;
+            }
 
-            lastJj = jj; // track last valid jj for THIS ii
-         }
+            if (lastJj != -1)
+               FrameHeaders.Add ((ii, lastJj));
 
-         if (lastJj != -1)
-            FrameHeaders.Add ((ii, lastJj));
-
-         // Debug test assertion
-         for (int kk = 0; kk < FrameHeaders.Count; kk++) {
-            int sindex = FrameHeaders[kk].Item1;
-            int eIndex = FrameHeaders[kk].Item2;
-            var ex = tss[eIndex].EndX;
-            var sx = tss[sindex].StartX;
-            if ((ex - sx).SGT (MaxFrameLength))
-               throw new Exception ($"In tss, the scope of tool scopes from {sx} to {ex}  = {ex - sx} for indices start {sindex} and end {eIndex} is more than Max Frame Length {MaxFrameLength}");
+            // Debug test assertion
+            for (int kk = 0; kk < FrameHeaders.Count; kk++) {
+               int sindex = FrameHeaders[kk].Item1;
+               int eIndex = FrameHeaders[kk].Item2;
+               var ex = tss[eIndex].EndX;
+               var sx = tss[sindex].StartX;
+               if ((ex - sx).SGT (MaxFrameLength))
+                  throw new Exception ($"In tss, the scope of tool scopes from {sx} to {ex}  = {ex - sx} for indices start {sindex} and end {eIndex} is more than Max Frame Length {MaxFrameLength}");
+            }
          }
       }
    }
@@ -287,7 +308,7 @@ public class PartMultiFrames {
    //     return res;
    //  }
 
-   public static LinkedList<ToolScope<Tooling>> GetToolScopesIxnAt (
+   public static LinkedList<ToolScope<Tooling>>? GetToolScopesIxnAt (
     LinkedList<ToolScope<Tooling>> toolScopes,
     double xVal,
     LinkedListNode<ToolScope<Tooling>>? sNode = null) {
@@ -442,23 +463,50 @@ public class PartMultiFrames {
       PointVec? prevFrameEndPosH2 = new (new Point3 (MaxFrameLength, 0, 0), XForm4.mZAxis);
 
       PopulateDictionaries (ToolScopesBySxList);
-      // DO find ii from non processed from dict2
+      // TODO find ii from non processed from dict2
+      // Frame should silently continue if a toolscope is already processed
+      // Problem may occur at the last frame.. ( ideally should not )
+      // This way each toolscope can be addressed without missing. 
+      // this way, the feature splitting can be addressed
+
       //. Iterate through all the candidate frames to find which the optimal frame is
       int ii = 0;
       while(true) {
          optimalFrame = null;
-         MarkProcessed (OptimalFrames);
          
          double totalTime = double.MaxValue;
-         var keys = CandidateFrames2.Keys.ToList ();
-         int stIndex = keys[ii];
-         var cfList = CandidateFrames2[stIndex] ?? throw new Exception ("CfList is null)");
+
+
+         //var keys = CandidateFrames2.Keys.ToList ();
+         //int stIndex = keys[ii];
+         //var cfList = CandidateFrames2[stIndex] ?? throw new Exception ("CfList is null)");
+
+         int stIndex = ii;     // since ii = first unprocessed index
+
+         if (!CandidateFrames2.TryGetValue (stIndex, out var cfList))
+            throw new Exception ($"For the index {stIndex} value not found in CandidateFrames2");
+         
+
+         if (cfList == null)
+            throw new Exception ($"For the index {stIndex} the list in CandidateFrames2 is null");
+         
          List<Frame> frames = [];
          int prevStIx = -1, prevEndIx = -1;
 
+         bool optimalFrameFound = false;
+         int kk;
+         for (kk = 0; kk < cfList.Count; kk++) {
+            // Find if the cf list is the last pass
+            double partLastToolScopeEx = ToolScopesByExList.Count == 0
+                                      ? 0
+                                      : ToolScopesByExList.Max (ts => ts.EndX);
+            double cfframesLastToolScopeEx = cfList[^1].cf.ToolScopesList.Count == 0
+                                       ? 0
+                                       : cfList[^1].cf.ToolScopesList.Max (ts => ts.EndX);
+            bool isPossibleLastFrame = partLastToolScopeEx.EQ (cfframesLastToolScopeEx);
+            if (isPossibleLastFrame)
+               kk = cfList.Count - 1;
 
-
-         for (int kk = 0; kk < cfList.Count; kk++) {
             var cfTSSs = cfList[kk].cf.ToolScopesList;
             var endIndex = cfList[kk].jj;
             if (prevStIx != -1 && prevEndIx != -1) {
@@ -484,7 +532,8 @@ public class PartMultiFrames {
                 rapidPosSpeed,
                 mcSpeed,
                 sOff2EngageTime,
-                standOffDist);
+                standOffDist,
+                isPossibleLastFrame);
             checkIndicexList.Add ((stIndex, endIndex));
             prevStIx = stIndex; prevEndIx = endIndex;
 
@@ -502,11 +551,17 @@ public class PartMultiFrames {
             }
          }
 
-
          if (optimalFrame == null)
             continue;
-         else
+         else {
             OptimalFrames.Add (optimalFrame);
+            optimalFrameFound = true;
+            if (optimalFrame.Value.FinishPositionHead1.HasValue)
+               prevFrameEndPosH1 = optimalFrame.Value.FinishPositionHead1;
+            if (optimalFrame.Value.FinishPositionHead2.HasValue)
+               prevFrameEndPosH2 = optimalFrame.Value.FinishPositionHead2;
+            machinableFrames.Add (optimalFrame.Value);
+         }
          //throw new Exception ($"Could not find the optimal frame for Set {ii}");
 
          // Get the next start and end indices
@@ -523,22 +578,24 @@ public class PartMultiFrames {
 
 
 
-         if (optimalFrame.Value.FinishPositionHead1.HasValue)
-            prevFrameEndPosH1 = optimalFrame.Value.FinishPositionHead1;
-         if (optimalFrame.Value.FinishPositionHead2.HasValue)
-            prevFrameEndPosH2 = optimalFrame.Value.FinishPositionHead2;
-         machinableFrames.Add (optimalFrame.Value);
+         
 
 
 
 
          ccFrames.Add (frames);
-         ii++;
-         if (ii >= keys.Count)
+         if (optimalFrameFound)
+            MarkProcessed (OptimalFrames);
+         int stix = ii;
+         // Find the index of the first unprocessed ToolScope in ToolScopesBySxList
+         ii = ToolScopesBySxList.FindIndex (ts => !ts.IsProcessed);
+         //if (ii < 0) break;
+         //var vall = CandidateFrames1[(stix, ii-1)];
+         if (ii < 0 )
             break;
       }
-      if (ccFrames.Count != FrameHeaders.Count)
-         throw new Exception ("ccFrames.Count != FrameHeaders.Count, serious error");
+      //if (ccFrames.Count != FrameHeaders.Count)
+      //   throw new Exception ("ccFrames.Count != FrameHeaders.Count, serious error");
    }
 
    public static void MarkProcessed (List<Frame?>? OptimalFrames) {
@@ -567,54 +624,33 @@ public class PartMultiFrames {
          }
       }
    }
-   //public static Frame? GetFrame (PartMultiFrames partMultiFrames, LinkedListNode<ToolScope<Tooling>>? sNode = null, LinkedListNode<ToolScope<Tooling>>? eNode = null) {
 
-   //   //// Remove already processed features from partMultiFrames.ToolScopesBySx
-   //   //var node = partMultiFrames.ToolScopesBySx.First;
-   //   //while (node != null) {
-   //   //   var next = node.Next; // IMPORTANT (save before delete)
+   List<List<GCodeSeg>[]> mCutScopeTraces = [];
+   public void AllocateCutScopeTraces (int nCutScopes) {
+      mCutScopeTraces = [];
+      for (int i = 0; i < nCutScopes; i++) {
+         // Create a new List<GCodeSeg>[] to hold the GCodeSeg lists
+         List<GCodeSeg>[] newCutScope = [[], []]; // Adjust the size based on your needs
 
-   //   //   var toolscope = node.Value;
+         // Add the new array to mCutScopeTraces
+         mCutScopeTraces.Add (newCutScope);
+      }
+   }
+   //public void GenerateGCode () {
+   //   if (OptimalFrames == null )
+   //      return;
+   //   // Allocate for CutscopeTraces
+   //   AllocateCutScopeTraces (OptimalFrames.Count);
+   //   //var mcCutScopes = MachinableCutScope.CreateMachinableCutScopes (mMachinableCutScopes, mGC);
+   //   var prevPartRatio = GCodeGen.PartitionRatio;
+   //   if (!GCodeGen.OptimizePartition) GCodeGen.PartitionRatio = 0.5;
+   //   if (GCodeGen.Heads == MCSettings.EHeads.Left || GCodeGen.Heads == MCSettings.EHeads.Right) GCodeGen.PartitionRatio = 1.0;
+   //   GCodeGen.BlockNumber = 0;
+   //   GCodeGen.GenerateGCode (GCodeGenerator.ToolHeadType.Master, mcCutScopes);
+   //   GCodeGen.GenerateGCode (GCodeGenerator.ToolHeadType.Slave, mcCutScopes);
 
-   //   //   // If already processed, remove from linked list
-   //   //   if (toolscope.IsProcessed) {
-   //   //      partMultiFrames.ToolScopesBySx.Remove (node); // O(1)
-   //   //   }
-
-   //   //   node = next;
-   //   //}
-
-   //   //// Remove already processed features from partMultiFrames.ToolScopesByEx
-   //   //node = partMultiFrames.ToolScopesByEx.First;
-   //   //while (node != null) {
-   //   //   var next = node.Next; // IMPORTANT (save before delete)
-
-   //   //   var toolscope = node.Value;
-
-   //   //   // If already processed, remove from linked list
-   //   //   if (toolscope.IsProcessed) {
-   //   //      partMultiFrames.ToolScopesByEx.Remove (node); // O(1)
-   //   //   }
-
-   //   //   node = next;
-   //   //}
-
-   //   // Find out the toolings that are FSx <= TsSx && TsEx <= FEx ToolScope completely inside the frame
-   //   // Remove already processed features from partMultiFrames.ToolScopesByEx
-   //   var node = partMultiFrames.ToolScopesByEx.First;
-   //   while (node != null) {
-   //      var next = node.Next; // IMPORTANT (save before delete)
-
-   //      var toolscope = node.Value;
-   //      if (!toolscope.IsProcessed) {
-
-   //      }
-   //      // If already processed, remove from linked list
-   //      //if (toolscope.IsProcessed) {
-   //      //   partMultiFrames.ToolScopesByEx.Remove (node); // O(1)
-   //      //}
-
-   //      node = next;
-   //   }
+   //   GCodeGen.BlockNumber = 0;
+   //   //CutScopeTraces = mGC.CutScopeTraces;
+   //   GCodeGen.PartitionRatio = prevPartRatio;
    //}
 }

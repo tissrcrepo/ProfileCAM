@@ -14,13 +14,13 @@ using System.Windows.Input;
 using System.Windows.Threading;
 using ProfileCAM.Core;
 using ProfileCAM.Core.AssemblyUtils;
-using ProfileCAM.Core.GCodeGen;
 using ProfileCAM.Core.Processes;
 using ProfileCAM.Presentation.Draw;
 using ProfileCAM.Input;
 using Flux.API;
 using Microsoft.Win32;
 using SPath = System.IO.Path;
+using ProfileCAM.Core.GCodeGen.LCMMultipass2HLegacy;
 
 namespace ProfileCAM.Presentation;
 /// <summary>Interaction logic for MainWindow.xaml</summary>

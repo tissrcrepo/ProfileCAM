@@ -1,7 +1,7 @@
 ﻿using System.ComponentModel;
-using ProfileCAM.Core.GCodeGen;
 using ProfileCAM.Core.Tools;
 using Flux.API;
+using ProfileCAM.Core.GCodeGen.LCMMultipass2HLegacy;
 
 namespace ProfileCAM.Core.Processes {
    /// <summary>GenesysHub is used to generate G-Code, and the Traces for simulation</summary>

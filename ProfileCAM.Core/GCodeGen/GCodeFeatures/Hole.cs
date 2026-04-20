@@ -1,7 +1,8 @@
 ﻿using Flux.API;
+using ProfileCAM.Core.GCodeGen.LCMMultipass2HLegacy;
 using ProfileCAM.Core.Geometries;
 
-namespace ProfileCAM.Core.GCodeGen {
+namespace ProfileCAM.Core.GCodeGen.GCodeFeatures {
    /// <summary>
    /// The Hole class represents cut holes exclusive to flanges.
    /// </summary>
@@ -26,7 +27,7 @@ namespace ProfileCAM.Core.GCodeGen {
       #endregion
 
       #region External References
-      public GCodeGenerator GCGen;
+      public IGCodeGenerator GCGen { get; private set; }
       #endregion
 
       #region Properties
@@ -34,7 +35,7 @@ namespace ProfileCAM.Core.GCodeGen {
       #endregion
 
       #region Constructor(s)
-      public Hole (Tooling toolingItem, GCodeGenerator gcgen, double xStart, double xEnd, double xPartition,
+      public Hole (Tooling toolingItem, IGCodeGenerator gcgen, double xStart, double xEnd, double xPartition,
          List<ToolingSegment> prevToolingSegs, ToolingSegment? prevToolingSegment, Bound3 bound,
          double prevCutToolingsLength, double prevMarkToolingsLength, double totalMarkLength, double totalToolingCutLength,
          bool firstTooling = false, Tooling prevToolingItem = null, bool isLastTooling = false
@@ -80,12 +81,12 @@ namespace ProfileCAM.Core.GCodeGen {
       public override void WriteTooling () {
          GCGen.InitializeToolingBlock (ToolingItem, mPrevToolingItem, /*frameFeed,*/
                   mXStart, mXPartition, mXEnd, ToolingSegments, isValidNotch: false, isFlexCut: false,
-                  mIsLastToolingItem/*, isToBeTreatedAsCutOut: false*/);
+                  mIsLastToolingItem/*, isToBeTreatedAsCutOut: false*/, startIndex: -1, endIndex: -1, nextTs: null);
          GCGen.RapidMoveToPiercingPositionWithPingPong = false;
          if (ToolingSegments == null || ToolingSegments?.Count == 0) return;
 
          GCGen.PrepareforToolApproach (ToolingItem, ToolingSegments, mPrevToolingSegment, mPrevToolingItem,
-            mPrevToolingSegs, mIsFirstTooling, isValidNotch: false);
+            mPrevToolingSegs, mIsFirstTooling, isValidNotch: false, notchEntry:null);
 
          // Output the Cutting offset. Customer need to cut hole slightly larger than given in geometry
          // We are using G42 than G41 while cutting holes
@@ -94,7 +95,7 @@ namespace ProfileCAM.Core.GCodeGen {
          var isFromWebFlange = Utils.IsMachiningFromWebFlange (ToolingSegments, 0);
 
          if (!GCGen.RapidMoveToPiercingPositionWithPingPong)
-            GCGen.RapidMoveToPiercingPosition (ToolingSegments[0].Curve.Start, ToolingSegments[0].Vec0, EKind.Hole, usePingPongOption: true);
+            GCGen.RapidMoveToPiercingPosition (ToolingSegments[0].Curve.Start, ToolingSegments[0].Vec0, EKind.Hole, usePingPongOption: true, comment:"");
 
          GCGen.WriteToolCorrectionData (ToolingItem);
          GCGen.WritePlaneForCircularMotionCommand (isFromWebFlange, isNotchCut: false);
@@ -102,7 +103,7 @@ namespace ProfileCAM.Core.GCodeGen {
          GCGen.EnableMachiningDirective ();
          // ** Machining **
          if (GCGen.CreateDummyBlock4Master) return;
-         mLastToolingSegment = GCGen.WriteTooling (ToolingSegments, ToolingItem);
+         mLastToolingSegment = GCGen.WriteTooling (ToolingSegments, ToolingItem, relativeCoords:false);
          GCGen.DisableMachiningDirective ();
 
          // ** Tooling block finalization - Start**

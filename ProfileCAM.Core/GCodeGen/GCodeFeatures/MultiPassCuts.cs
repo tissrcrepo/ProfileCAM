@@ -1,11 +1,11 @@
 ﻿using System.Collections.Generic;
-using ProfileCAM.Core;
 using ProfileCAM.Core.Geometries;
 using Flux.API;
 //using CutScopeToolingList = List<(List<Tooling> ToolingList, double XMin, double XMax)>;
-using ToolingCutScope = (double Position, ProfileCAM.Core.GCodeGen.ToolingScope ToolScope, bool IsStart);
+using ToolingCutScope = (double Position, ProfileCAM.Core.GCodeGen.GCodeFeatures.ToolingScope ToolScope, bool IsStart);
+using ProfileCAM.Core.GCodeGen.LCMMultipass2HLegacy;
 
-namespace ProfileCAM.Core.GCodeGen {
+namespace ProfileCAM.Core.GCodeGen.GCodeFeatures {
    using CutScopeToolingList = List<(List<Tooling> ToolingList, double XMin, double XMax)>;
    using ToolingCutScope = (double Position, ToolingScope ToolScope, bool IsStart);
    public class Scope (double xmin, double xmax) {
@@ -16,13 +16,9 @@ namespace ProfileCAM.Core.GCodeGen {
          List<Scope> result = [];
 
          // Case 1: 'a' is completely to the left of 'b' without overlap
-         if (a.XMax.SLT (b.XMin)) {
-            result.Add (b);
-         }
+         if (a.XMax.SLT (b.XMin))             result.Add (b);
          // Case 2: 'a' is completely to the right of 'b' without overlap
-         else if (a.XMin.SGT (b.XMax)) {
-            result.Add (b);
-         }
+         else if (a.XMin.SGT (b.XMax))             result.Add (b);
          // Case 3: 'a' is strictly inside 'b', splitting 'b' into two separate segments
          else if (a.XMin.SGT (b.XMin) && a.XMax.SLT (b.XMax)) {
             Scope s1 = new (b.XMin, a.XMin);
@@ -31,29 +27,19 @@ namespace ProfileCAM.Core.GCodeGen {
             result.Add (s2);
          }
          // Case 4: 'a' overlaps 'b' on the right side, starting from the same XMin as 'b'
-         else if (a.XMin.EQ (b.XMin) && a.XMax.SLT (b.XMax)) {
-            result.Add (new Scope (a.XMax, b.XMax));
-         }
+         else if (a.XMin.EQ (b.XMin) && a.XMax.SLT (b.XMax))             result.Add (new Scope (a.XMax, b.XMax));
          // Case 5: 'a' overlaps 'b' on the left side, ending at the same XMax as 'b'
-         else if (a.XMin.SGT (b.XMin) && a.XMax.EQ (b.XMax)) {
-            result.Add (new Scope (b.XMin, a.XMin));
-         }
+         else if (a.XMin.SGT (b.XMin) && a.XMax.EQ (b.XMax))             result.Add (new Scope (b.XMin, a.XMin));
          // Case 6: 'a' overlaps 'b' from the left side but does not fully cover 'b'
-         else if (a.XMin.SLT (b.XMin) && a.XMax.SLT (b.XMax) && a.XMax.SGT (b.XMin)) {
-            result.Add (new Scope (a.XMax, b.XMax));
-         }
+         else if (a.XMin.SLT (b.XMin) && a.XMax.SLT (b.XMax) && a.XMax.SGT (b.XMin))             result.Add (new Scope (a.XMax, b.XMax));
          // Case 7: 'a' overlaps 'b' from the right side but does not fully cover 'b'
-         else if (a.XMin.SGT (b.XMin) && a.XMin.SLT (b.XMax) && a.XMax.SGT (b.XMax)) {
-            result.Add (new Scope (b.XMin, a.XMin));
-         }
+         else if (a.XMin.SGT (b.XMin) && a.XMin.SLT (b.XMax) && a.XMax.SGT (b.XMax))             result.Add (new Scope (b.XMin, a.XMin));
          // Case 8: 'a' fully overlaps 'b' or matches its boundaries completely - do nothing
          else if (a.XMin.LTEQ (b.XMin) && a.XMax.GTEQ (b.XMax)) {
             // Do nothing - 'a' completely overlaps 'b'
          }
          // Default case: add 'b' if no other conditions match
-         else {
-            result.Add (b);
-         }
+         else             result.Add (b);
 
          return result;
       }
@@ -102,12 +88,10 @@ namespace ProfileCAM.Core.GCodeGen {
       /// <returns></returns>
       public static List<ToolingScope> CreateToolingScopes (List<Tooling> toolings, bool isLeftToRight = true) {
          List<ToolingScope> tss = [];
-         if (toolings != null) {
-            for (int ii = 0; ii < toolings.Count; ii++) {
+         if (toolings != null)             for (int ii = 0; ii < toolings.Count; ii++) {
                var scope = toolings[ii];
                tss.Add (new ToolingScope (scope, ii, isLeftToRight));
             }
-         }
          return tss;
       }
       #endregion
@@ -117,7 +101,7 @@ namespace ProfileCAM.Core.GCodeGen {
       public double EndX { get; set; }
       public bool ToSplit { get; set; }
       public Tooling Tooling { get => mT; set => mT = value; }
-      public double Size { get => (mIsLeftToRight ? (EndX - StartX) : (StartX - EndX)); }
+      public double Size { get => mIsLeftToRight ? EndX - StartX : StartX - EndX; }
       public List<ToolingSegment> Segs { get => mT.Segs; }
       public int Index { get; set; }
       public double Length { get; set; }
@@ -130,12 +114,10 @@ namespace ProfileCAM.Core.GCodeGen {
       public bool IsProcessed { get; set; } = false;
       public bool IsNotchSplitComplete { get; set; } = false;
       public bool IsIntersect (double x, bool considerEndPoints = false) {
-         if (((x - StartX) / (EndX - StartX)).LieWithin (0, 1)) {
-            if (!considerEndPoints) {
+         if (((x - StartX) / (EndX - StartX)).LieWithin (0, 1))             if (!considerEndPoints) {
                if (!(x - StartX).EQ (0) && !(x - EndX).EQ (0)) return true;
                return false;
             } else return true;
-         }
          return false;
       }
 
@@ -195,16 +177,16 @@ namespace ProfileCAM.Core.GCodeGen {
          return false;
       }
       public static bool IsToolingWithin (CutScope cs, ToolingScope t, double tol) {
-         if (cs.mIsLeftToRight && (AreIdentical (cs, t, tol) || (cs.EndX.GTEQ (t.EndX, tol) && t.StartX.GTEQ (cs.StartX, tol))))
+         if (cs.mIsLeftToRight && (AreIdentical (cs, t, tol) || cs.EndX.GTEQ (t.EndX, tol) && t.StartX.GTEQ (cs.StartX, tol)))
             return true;
-         if (!cs.mIsLeftToRight && (AreIdentical (cs, t, tol) || (cs.StartX.GTEQ (t.StartX, tol) && t.EndX.GTEQ (cs.EndX, tol))))
+         if (!cs.mIsLeftToRight && (AreIdentical (cs, t, tol) || cs.StartX.GTEQ (t.StartX, tol) && t.EndX.GTEQ (cs.EndX, tol)))
             return true;
          return false;
       }
       public static bool IsToolingWithin (CutScope cs, ToolingScope t) {
-         if (cs.mIsLeftToRight && (AreIdentical (cs, t) || (cs.EndX.GTEQ (t.EndX) && t.StartX.GTEQ (cs.StartX))))
+         if (cs.mIsLeftToRight && (AreIdentical (cs, t) || cs.EndX.GTEQ (t.EndX) && t.StartX.GTEQ (cs.StartX)))
             return true;
-         if (!cs.mIsLeftToRight && (AreIdentical (cs, t) || (cs.StartX.GTEQ (t.StartX) && t.EndX.GTEQ (cs.EndX))))
+         if (!cs.mIsLeftToRight && (AreIdentical (cs, t) || cs.StartX.GTEQ (t.StartX) && t.EndX.GTEQ (cs.EndX)))
             return true;
          return false;
       }
@@ -226,61 +208,49 @@ namespace ProfileCAM.Core.GCodeGen {
       }
       public static bool IsToolingIntersect (CutScope cs, ToolingScope t, double tol) {
          if (cs.mIsLeftToRight) {
-            if (CutScope.EQ (cs, t, tol)) return false;
-            if ((t.EndX.SGT (cs.StartX, tol) && (cs.StartX.SGT (t.StartX, tol)))) return true;
-            if ((t.EndX.SGT (cs.EndX, tol) && (cs.EndX.SGT (t.StartX, tol)))) return true;
+            if (EQ (cs, t, tol)) return false;
+            if (t.EndX.SGT (cs.StartX, tol) && cs.StartX.SGT (t.StartX, tol)) return true;
+            if (t.EndX.SGT (cs.EndX, tol) && cs.EndX.SGT (t.StartX, tol)) return true;
          } else {
-            if (CutScope.EQ (cs, t, tol)) return false;
-            if ((t.StartX.SGT (cs.EndX, tol) && (cs.EndX.SGT (t.EndX, tol)))) return true;
-            if ((t.StartX.SGT (cs.StartX, tol) && (cs.StartX.SGT (t.EndX, tol)))) return true;
+            if (EQ (cs, t, tol)) return false;
+            if (t.StartX.SGT (cs.EndX, tol) && cs.EndX.SGT (t.EndX, tol)) return true;
+            if (t.StartX.SGT (cs.StartX, tol) && cs.StartX.SGT (t.EndX, tol)) return true;
          }
          return false;
       }
       public static bool IsToolingIntersect (CutScope cs, ToolingScope t) {
-         if (CutScope.EQ (cs, t)) return false;
+         if (EQ (cs, t)) return false;
          if (cs.mIsLeftToRight) {
-            if ((t.EndX.SGT (cs.StartX) && (cs.StartX.SGT (t.StartX)))) return true;
-            if ((t.EndX.SGT (cs.EndX) && (cs.EndX.SGT (t.StartX)))) return true;
+            if (t.EndX.SGT (cs.StartX) && cs.StartX.SGT (t.StartX)) return true;
+            if (t.EndX.SGT (cs.EndX) && cs.EndX.SGT (t.StartX)) return true;
          } else {
-            if ((t.StartX.SGT (cs.EndX) && (cs.EndX.SGT (t.EndX)))) return true;
-            if ((t.StartX.SGT (cs.StartX) && (cs.StartX.SGT (t.EndX)))) return true;
+            if (t.StartX.SGT (cs.EndX) && cs.EndX.SGT (t.EndX)) return true;
+            if (t.StartX.SGT (cs.StartX) && cs.StartX.SGT (t.EndX)) return true;
          }
          return false;
       }
       public static bool IsToolingIntersectForward (CutScope cs, ToolingScope t, double tol) {
-         if (CutScope.EQ (cs, t, tol)) return false;
-         if (cs.mIsLeftToRight) {
-            if ((cs.StartX.SLT (t.StartX, tol) && (t.StartX.SLT (cs.EndX, tol) && (cs.EndX.SLT (t.EndX, tol))))) return true;
-         } else {
-            if ((cs.StartX.SGT (t.StartX, tol) && (t.StartX.SGT (cs.EndX, tol) && (cs.EndX.SGT (t.EndX, tol))))) return true;
-         }
+         if (EQ (cs, t, tol)) return false;
+         if (cs.mIsLeftToRight)             if (cs.StartX.SLT (t.StartX, tol) && t.StartX.SLT (cs.EndX, tol) && cs.EndX.SLT (t.EndX, tol)) return true;
+else             if (cs.StartX.SGT (t.StartX, tol) && t.StartX.SGT (cs.EndX, tol) && cs.EndX.SGT (t.EndX, tol)) return true;
          return false;
       }
       public static bool IsToolingIntersectForward (CutScope cs, ToolingScope t) {
-         if (CutScope.EQ (cs, t)) return false;
-         if (cs.mIsLeftToRight) {
-            if (((cs.StartX.SLT (t.StartX) || cs.StartX.EQ (t.StartX)) && (t.StartX.SLT (cs.EndX) && (cs.EndX.SLT (t.EndX))))) return true;
-         } else {
-            if (((cs.StartX.SGT (t.StartX) || cs.StartX.EQ (t.StartX)) && (t.StartX.SGT (cs.EndX) && (cs.EndX.SGT (t.EndX))))) return true;
-         }
+         if (EQ (cs, t)) return false;
+         if (cs.mIsLeftToRight)             if ((cs.StartX.SLT (t.StartX) || cs.StartX.EQ (t.StartX)) && t.StartX.SLT (cs.EndX) && cs.EndX.SLT (t.EndX)) return true;
+else             if ((cs.StartX.SGT (t.StartX) || cs.StartX.EQ (t.StartX)) && t.StartX.SGT (cs.EndX) && cs.EndX.SGT (t.EndX)) return true;
          return false;
       }
       public static bool IsToolingIntersectReverse (CutScope cs, ToolingScope t, double tol) {
-         if (CutScope.EQ (cs, t, tol)) return false;
-         if (cs.mIsLeftToRight) {
-            if ((t.StartX.SLT (cs.StartX, tol) && (cs.StartX.SLT (t.EndX, tol) && (t.EndX.SLT (cs.EndX, tol))))) return true;
-         } else {
-            if ((t.StartX.SGT (cs.StartX, tol) && (cs.StartX.SGT (t.EndX, tol) && (t.EndX.SGT (cs.EndX, tol))))) return true;
-         }
+         if (EQ (cs, t, tol)) return false;
+         if (cs.mIsLeftToRight)             if (t.StartX.SLT (cs.StartX, tol) && cs.StartX.SLT (t.EndX, tol) && t.EndX.SLT (cs.EndX, tol)) return true;
+else             if (t.StartX.SGT (cs.StartX, tol) && cs.StartX.SGT (t.EndX, tol) && t.EndX.SGT (cs.EndX, tol)) return true;
          return false;
       }
       public static bool IsToolingIntersectReverse (CutScope cs, ToolingScope t) {
-         if (CutScope.EQ (cs, t)) return false;
-         if (cs.mIsLeftToRight) {
-            if ((t.StartX.SLT (cs.StartX) && (cs.StartX.SLT (t.EndX) && (t.EndX.SLT (cs.EndX))))) return true;
-         } else {
-            if ((t.StartX.SGT (cs.StartX) && (cs.StartX.SGT (t.EndX) && (t.EndX.SGT (cs.EndX))))) return true;
-         }
+         if (EQ (cs, t)) return false;
+         if (cs.mIsLeftToRight)             if (t.StartX.SLT (cs.StartX) && cs.StartX.SLT (t.EndX) && t.EndX.SLT (cs.EndX)) return true;
+else             if (t.StartX.SGT (cs.StartX) && cs.StartX.SGT (t.EndX) && t.EndX.SGT (cs.EndX)) return true;
          return false;
       }
       #endregion
@@ -327,7 +297,7 @@ namespace ProfileCAM.Core.GCodeGen {
          mMPC = mpc;
          if (isLeftToRight) mMaxScopeLength = EndX - startX;
          else mMaxScopeLength = StartX - EndX;
-         CutScope.SortAndReIndex (ref mpc, mIsLeftToRight);
+         SortAndReIndex (ref mpc, mIsLeftToRight);
 
          mToolingScopesWithin = [];
          mToolingScopesIntersect = [];
@@ -362,14 +332,13 @@ namespace ProfileCAM.Core.GCodeGen {
          if (mIsLeftToRight) Size = endXPos - StartX;
          else Size = StartX - endXPos;
          mMPC = mpc;
-         CutScope.SortAndReIndex (ref mpc, mIsLeftToRight);
+         SortAndReIndex (ref mpc, mIsLeftToRight);
          mToolingScopesWithin = [];
          mToolingScopesIntersect = [];
          mMaxScopeLength = MaximumScopeLength;
          CategorizeToolings ();
-         if (mpc.mGC.Heads == MCSettings.EHeads.Both) {
-            if (!deadbandWidth.EQ (0)) AssessDeadBandFeatIndices (ref mMPC);
-         } else
+         if (mpc.mGC.Heads == MCSettings.EHeads.Both)             if (!deadbandWidth.EQ (0)) AssessDeadBandFeatIndices (ref mMPC);
+else
             DeadBandScope = null;
          ComputeBound ();
       }
@@ -520,18 +489,18 @@ namespace ProfileCAM.Core.GCodeGen {
          mToolingScopesIntersect = [];
          mToolingScopesIntersectForward = [];
          mToolingScopesIntersectReverse = [];
-         CutScope.SortAndReIndex (ref mMPC, mIsLeftToRight);
+         SortAndReIndex (ref mMPC, mIsLeftToRight);
          int ii = 0;
          for (ii = 0; ii < mMPC.ToolingScopes.Count; ii++) {
             var it = mMPC.ToolingScopes[ii];
             if (it.IsProcessed) continue;
-            if (CutScope.IsToolingWithin (cs, it))
+            if (IsToolingWithin (cs, it))
                mToolingScopesWithin.Add (ii);
-            if (CutScope.IsToolingIntersect (cs, it))
+            if (IsToolingIntersect (cs, it))
                mToolingScopesIntersect.Add (ii);
-            if (CutScope.IsToolingIntersectForward (cs, it))
+            if (IsToolingIntersectForward (cs, it))
                mToolingScopesIntersectForward.Add (ii);
-            if (CutScope.IsToolingIntersectReverse (cs, it))
+            if (IsToolingIntersectReverse (cs, it))
                mToolingScopesIntersectReverse.Add (ii);
          }
          var csc = this;
@@ -587,7 +556,7 @@ namespace ProfileCAM.Core.GCodeGen {
             if (ts.IsNotch () && !splitNotches) continue;
             if (!ts.IsNotch () && !splitNonNotches) continue;
             bool canSplit = true;
-            if (thresholdLength > 0 && (ts.Size.SLT (thresholdLength))) canSplit = false;
+            if (thresholdLength > 0 && ts.Size.SLT (thresholdLength)) canSplit = false;
             if (!canSplit) continue;
             if (ts.IsIntersect (ixnX, considerEndPoints: false)) {
                // Remove the element at index i
@@ -680,12 +649,10 @@ namespace ProfileCAM.Core.GCodeGen {
          var endTSList = UnTouchedToolingScopes.OrderBy (x => x.EndX).ToList ();
 
          int h1Index = 0, h2Index = 0;
-         for (int i = 0; i < UnTouchedToolingScopes.Count; i++) {
-            if (UnTouchedToolingScopes[i].StartX >= deadMax) {
+         for (int i = 0; i < UnTouchedToolingScopes.Count; i++)             if (UnTouchedToolingScopes[i].StartX >= deadMax) {
                h2Index = i;
                break;
             }
-         }
 
          double h1Len = 0, h2Len = 0;
 
@@ -703,11 +670,11 @@ namespace ProfileCAM.Core.GCodeGen {
                TSInScope2.Add (h2.Index);
                h2Len += h2.Length;
                h2Index++;
-            } else if (h1Len <= (h2Len + tol) && h1.EndX <= deadMin) {
+            } else if (h1Len <= h2Len + tol && h1.EndX <= deadMin) {
                TSInScope1.Add (h1.Index);
                h1Len += h1.Length;
                h1Index++;
-            } else if (h2Len <= (h1Len + tol) && h2.StartX >= deadMax && h2.EndX < EndX) {
+            } else if (h2Len <= h1Len + tol && h2.StartX >= deadMax && h2.EndX < EndX) {
                TSInScope2.Add (h2.Index);
                h2Len += h2.Length;
                h2Index++;
@@ -756,13 +723,8 @@ namespace ProfileCAM.Core.GCodeGen {
       }
 
       void SegregateToolingScopes () {
-         foreach (var ts in UnTouchedToolingScopes) {
-            if (ts.EndX <= deadZoneXmin) {
-               TSInScope1.Add (ts.Index);
-            } else if (ts.StartX >= deadZoneXmax && ts.EndX <= EndX) {
-               TSInScope2.Add (ts.Index);
-            }
-         }
+         foreach (var ts in UnTouchedToolingScopes)             if (ts.EndX <= deadZoneXmin)                TSInScope1.Add (ts.Index);
+else if (ts.StartX >= deadZoneXmax && ts.EndX <= EndX)                TSInScope2.Add (ts.Index);
       }
 
       public void UpdateMachiningTime (double initiationTime, double machiningTime, double movementTime) {
@@ -786,7 +748,7 @@ namespace ProfileCAM.Core.GCodeGen {
             machiningTime += ts[i].Length * machiningTF;
             movingTime += (ts[i + 1].StartX - ts[i].StartX) * movingTF;
          }
-         machiningTime += (ts.Last ().Length) * machiningTF;
+         machiningTime += ts.Last ().Length * machiningTF;
       }
       #endregion Branch and Bound Cutscope Methods
    }
@@ -983,7 +945,7 @@ namespace ProfileCAM.Core.GCodeGen {
 
       #region Predicates
       public static bool IsMultipassCutTask (Model3 model) {
-         if ((((double)(model.Bound.XMax - model.Bound.XMin)).SLT (MCSettings.It.MaxFrameLength))) return false;
+         if (((double)(model.Bound.XMax - model.Bound.XMin)).SLT (MCSettings.It.MaxFrameLength)) return false;
          return true;
       }
       #endregion
@@ -1011,16 +973,14 @@ namespace ProfileCAM.Core.GCodeGen {
       /// criteria compete with each other and one or more tool scopes is left out without consideration.</exception>
       public void ComputeQuasiOptimalCutScopes () {
          var mpc = this;
-         mMachinableCutScopes = MultiPassCuts.GetQuasiOptimalCutScopes (ref mpc, mIsLeftToRight, mpc.MaximumScopeLength,
-               this.XMin, this.XMax, MaximizeFrameLengthInMultipass, MinimumThresholdNotchLength);
+         mMachinableCutScopes = GetQuasiOptimalCutScopes (ref mpc, mIsLeftToRight, mpc.MaximumScopeLength,
+               XMin, XMax, MaximizeFrameLengthInMultipass, MinimumThresholdNotchLength);
 
          // Intentionally throw exception if even one of the Toolscopes is not accommodated in one of the 
          // cutscopes. This is set as IsProcessed flag on the ToolScope
-         for (int ii = 0; ii < mMachinableCutScopes.Count; ii++) {
-            for (int jj = 0; jj < mMachinableCutScopes[ii].MachinableToolingScopes.Count; jj++)
+         for (int ii = 0; ii < mMachinableCutScopes.Count; ii++)             for (int jj = 0; jj < mMachinableCutScopes[ii].MachinableToolingScopes.Count; jj++)
                if (!mMachinableCutScopes[ii].MachinableToolingScopes[jj].IsProcessed)
                   throw new Exception ("One or more ToolScopes have not been processed.");
-         }
       }
 
       /// <summary>
@@ -1030,7 +990,7 @@ namespace ProfileCAM.Core.GCodeGen {
       public void ComputeBranchAndBoundCutscopes () {
          var mpc = this;
          mMachinableCutScopes = GetBranchAndBoundCutscopes (ref mpc, mIsLeftToRight, mpc.MaximumScopeLength,
-               this.XMin, this.XMax, Bound, MaximizeFrameLengthInMultipass, MinimumThresholdNotchLength);
+               XMin, XMax, Bound, MaximizeFrameLengthInMultipass, MinimumThresholdNotchLength);
          mMachinableCutScopes.ForEach (cs => cs.ComputeBoundForMachinableTS ());
       }
 
@@ -1041,7 +1001,7 @@ namespace ProfileCAM.Core.GCodeGen {
       public void ComputeSpatialOptimizationCutscopes () {
          var mpc = this;
          mMachinableCutScopes = GetSpatialOptimizationCutscopes (ref mpc, mIsLeftToRight, mpc.MaximumScopeLength,
-               this.XMin, this.XMax, Bound, MaximizeFrameLengthInMultipass, MinimumThresholdNotchLength);
+               XMin, XMax, Bound, MaximizeFrameLengthInMultipass, MinimumThresholdNotchLength);
          mMachinableCutScopes.ForEach (cs => cs.ComputeBoundForMachinableTS ());
       }
 
@@ -1075,7 +1035,7 @@ namespace ProfileCAM.Core.GCodeGen {
       public static List<ToolingScope> GetToolScopesFromIndices (List<int> tsIxs, List<ToolingScope> refTss, bool excludeProcessed = false) {
          var tss = tsIxs.Where (index => index >= 0 && index < refTss.Count) // Ensure index is valid
              .Select (index => refTss[index])
-             .Where (ts => (excludeProcessed && ts.IsProcessed == false) || excludeProcessed == false)
+             .Where (ts => excludeProcessed && ts.IsProcessed == false || excludeProcessed == false)
              .OrderBy (ts => ts.StartX)
              .ToList ();
          return tss;
@@ -1119,8 +1079,7 @@ namespace ProfileCAM.Core.GCodeGen {
          CutScope.SortAndReIndex (ref mpc, isLeftToRight);
 
          double offset = 0, startXPos = 0, endXPos = 0;
-         if (mpc.mGC.Heads == MCSettings.EHeads.Both) {
-            if (isLeftToRight) {
+         if (mpc.mGC.Heads == MCSettings.EHeads.Both)             if (isLeftToRight) {
                offset = mpc.ToolingScopes[0].StartX - minXWorkPiece;
                startXPos = minXWorkPiece;
                if (offset < 0) offset = 0;
@@ -1131,11 +1090,11 @@ namespace ProfileCAM.Core.GCodeGen {
                startXPos = maxXWorkPiece;
                endXPos = startXPos - offset - maxScopeLength;
             }
-         } else if (mpc.mGC.Heads == MCSettings.EHeads.Left || mpc.mGC.Heads == MCSettings.EHeads.Right) {
+else if (mpc.mGC.Heads == MCSettings.EHeads.Left || mpc.mGC.Heads == MCSettings.EHeads.Right) {
             offset = mpc.ToolingScopes[0].StartX - minXWorkPiece;
             startXPos = minXWorkPiece;
             if (offset < 0) offset = 0;
-            endXPos = startXPos + offset + ((maxScopeLength - mpc.DeadBandWidth) / 2.0);
+            endXPos = startXPos + offset + (maxScopeLength - mpc.DeadBandWidth) / 2.0;
          } else throw new Exception ("In GetQuasiOptimalCutScopes: Unknown head");
 
          // Input to the following while loop are startXPos <-- Starting position of the new cutScope
@@ -1153,13 +1112,11 @@ namespace ProfileCAM.Core.GCodeGen {
             // Order by decending StartX keeps the highest StartX at the 0th element. 
             // Create the CutScope from MaximumWorkpieceLength to highest startX toolscope.
             CutScope cs = null;
-            if (mpc.mGC.Heads == MCSettings.EHeads.Both) {
-               cs = new (startXPos, offset, endXPos, mpc.Model.Bound, maxScopeLength, mpc.DeadBandWidth,
+            if (mpc.mGC.Heads == MCSettings.EHeads.Both)                cs = new (startXPos, offset, endXPos, mpc.Model.Bound, maxScopeLength, mpc.DeadBandWidth,
                ref mpc, mpc.mIsLeftToRight);
-            } else if (mpc.mGC.Heads == MCSettings.EHeads.Left || mpc.mGC.Heads == MCSettings.EHeads.Right) {
-               cs = new (startXPos, offset, endXPos, mpc.Model.Bound, maxScopeLength, mpc.DeadBandWidth,
+else if (mpc.mGC.Heads == MCSettings.EHeads.Left || mpc.mGC.Heads == MCSettings.EHeads.Right)                cs = new (startXPos, offset, endXPos, mpc.Model.Bound, maxScopeLength, mpc.DeadBandWidth,
                ref mpc, mpc.mIsLeftToRight);
-            } else throw new Exception ("No tool head is active or set");
+else throw new Exception ("No tool head is active or set");
             startXPos = cs.StartX;
             currDBScope = cs.DeadBandScope;
             var tss = mpc.ToolingScopes;
@@ -1178,11 +1135,9 @@ namespace ProfileCAM.Core.GCodeGen {
                (mpc.ToolingScopes, splitToolScopes2) = CutScope.SplitToolingScopesAtIxn (mpc.ToolingScopes, mpc, currDBScope.XMax, mpc.Bound,
                                     mpc.mGC,
                                     thresholdLength: 100, splitNotches: true, splitNonNotches: false);
-            } else if (mpc.mGC.Heads == MCSettings.EHeads.Left || mpc.mGC.Heads == MCSettings.EHeads.Right) {
-               (mpc.ToolingScopes, splitToolScopes1) = CutScope.SplitToolingScopesAtIxn (mpc.ToolingScopes, mpc,
-                  startXPos + ((maxScopeLength - mpc.DeadBandWidth) / 2.0), mpc.Bound, mpc.mGC,
+            } else if (mpc.mGC.Heads == MCSettings.EHeads.Left || mpc.mGC.Heads == MCSettings.EHeads.Right)                (mpc.ToolingScopes, splitToolScopes1) = CutScope.SplitToolingScopesAtIxn (mpc.ToolingScopes, mpc,
+                  startXPos + (maxScopeLength - mpc.DeadBandWidth) / 2.0, mpc.Bound, mpc.mGC,
                   thresholdLength: 100, splitNotches: true, splitNonNotches: false);
-            }
 
             if (splitToolScopes1 || splitToolScopes1) {
                cs = new (startXPos, offset, endXPos, mpc.Model.Bound, maxScopeLength, mpc.DeadBandWidth,
@@ -1242,18 +1197,15 @@ namespace ProfileCAM.Core.GCodeGen {
                   // not adhere to the min notch split options. Splitting shall be called only after possible resizing
                   // of CutScope
                   bool splitToolScopes = false;
-                  if (mpc.mGC.Heads == MCSettings.EHeads.Both) {
-                     if (passType == PassType.CutScope)
+                  if (mpc.mGC.Heads == MCSettings.EHeads.Both)                      if (passType == PassType.CutScope)
                         (mpc.ToolingScopes, splitToolScopes) = CutScope.SplitToolingScopesAtIxn (mpc.ToolingScopes, mpc, currDBScope.XMin, mpc.Bound,
                                  mpc.mGC, thresholdLength: 100, splitNotches: true, splitNonNotches: false);
                      else
                         (mpc.ToolingScopes, splitToolScopes) = CutScope.SplitToolingScopesAtIxn (mpc.ToolingScopes, mpc, cs.StartX, mpc.Bound,
                                  mpc.mGC, thresholdLength: 100, splitNotches: true, splitNonNotches: false);
-                  } else if (mpc.mGC.Heads == MCSettings.EHeads.Left || mpc.mGC.Heads == MCSettings.EHeads.Right) {
-                     (mpc.ToolingScopes, splitToolScopes) = CutScope.SplitToolingScopesAtIxn (mpc.ToolingScopes,
-                        mpc, startXPos + ((maxScopeLength - mpc.DeadBandWidth) / 2.0), mpc.Bound,
+else if (mpc.mGC.Heads == MCSettings.EHeads.Left || mpc.mGC.Heads == MCSettings.EHeads.Right)                      (mpc.ToolingScopes, splitToolScopes) = CutScope.SplitToolingScopesAtIxn (mpc.ToolingScopes,
+                        mpc, startXPos + (maxScopeLength - mpc.DeadBandWidth) / 2.0, mpc.Bound,
                                  mpc.mGC, thresholdLength: 100, splitNotches: true, splitNonNotches: false);
-                  }
 
                   // After splitting the notch into two, Sort and gether tool scopes that are outside the dead band
                   if (splitToolScopes) {
@@ -1265,14 +1217,12 @@ namespace ProfileCAM.Core.GCodeGen {
                   }
 
                   splitToolScopes = false;
-                  if (mpc.mGC.Heads == MCSettings.EHeads.Both) {
-                     if (passType == PassType.CutScope)
+                  if (mpc.mGC.Heads == MCSettings.EHeads.Both)                      if (passType == PassType.CutScope)
                         (mpc.ToolingScopes, splitToolScopes) = CutScope.SplitToolingScopesAtIxn (mpc.ToolingScopes, mpc, currDBScope.XMax, mpc.Bound,
                                  mpc.mGC, thresholdLength: 100, splitNotches: true, splitNonNotches: false);
                      else
                         (mpc.ToolingScopes, splitToolScopes) = CutScope.SplitToolingScopesAtIxn (mpc.ToolingScopes, mpc, cs.EndX, mpc.Bound,
                                     mpc.mGC, thresholdLength: 100, splitNotches: true, splitNonNotches: false);
-                  }
 
                   // After splitting the notch into two, Sort and gether tool scopes that are outside the dead band
                   if (splitToolScopes) {
@@ -1307,7 +1257,7 @@ namespace ProfileCAM.Core.GCodeGen {
                      dist = startXPos - bound.XMin;
                      if (dist < 0) throw new Exception ("right to left pass is not proper in multipass notch");
                   }
-                  if ((dist.LTEQ (maxScopeLength))) {
+                  if (dist.LTEQ (maxScopeLength)) {
                      // The notch extents are with in the current scope. Even if the startXPos 
                      // changes in the optim iteration (here), this notch can fully be machined. 
                      // Add this notch in the featsWithIn list, mark it processed and remove it 
@@ -1337,12 +1287,12 @@ namespace ProfileCAM.Core.GCodeGen {
                      // Recomputing the point on the notch is done to stay relevant w.r.t max scope while
                      // going very near the notch ends.
                      Point3 notchXPt2;
-                     if ((Math.Abs (toolingLength - len).LTEQ (minimumThresholdNotchLength))) {
+                     if (Math.Abs (toolingLength - len).LTEQ (minimumThresholdNotchLength)) {
                         (notchXPt2, index) = Geom.GetPointAtLength (notchTSegs, toolingLength - (len + minimumThresholdNotchLength));
                         endXPos = notchXPt2.X;
                         endXPosChanged = true;
-                     } else if ((len.LTEQ (minimumThresholdNotchLength))) {
-                        (notchXPt2, index) = Geom.GetPointAtLength (notchTSegs, (len + minimumThresholdNotchLength));
+                     } else if (len.LTEQ (minimumThresholdNotchLength)) {
+                        (notchXPt2, index) = Geom.GetPointAtLength (notchTSegs, len + minimumThresholdNotchLength);
                         endXPos = notchXPt2.X;
                         endXPosChanged = true;
                      }
@@ -1364,11 +1314,10 @@ namespace ProfileCAM.Core.GCodeGen {
                // If minimizeNotchSplits is requested, and if largest of notches' startX is
                // greater than the "endXPos", make that startX as the current "endXPos".
                if (!overrideMinNotchCutOption && minimizeNotchSplits && ixnNotches.Count > 0
-                  && (((ixnNotches[0].EndX.SLT (endXPos) && !mpc.mIsLeftToRight) ||
-                  ((ixnNotches[0].EndX.SGT (endXPos) && mpc.mIsLeftToRight))))) {
-                  if ((Math.Abs (ixnNotches[0].StartX - ixnNotches[0].EndX).SGT (maxScopeLength) && mpc.mGC.Heads == MCSettings.EHeads.Both) ||
-                     (Math.Abs (ixnNotches[0].StartX - ixnNotches[0].EndX).SGT ((maxScopeLength - mpc.DeadBandWidth) / 2.0) &&
-                     (mpc.mGC.Heads == MCSettings.EHeads.Left || mpc.mGC.Heads == MCSettings.EHeads.Right))) {
+                  && (ixnNotches[0].EndX.SLT (endXPos) && !mpc.mIsLeftToRight ||
+                  ixnNotches[0].EndX.SGT (endXPos) && mpc.mIsLeftToRight))                   if (Math.Abs (ixnNotches[0].StartX - ixnNotches[0].EndX).SGT (maxScopeLength) && mpc.mGC.Heads == MCSettings.EHeads.Both ||
+                     Math.Abs (ixnNotches[0].StartX - ixnNotches[0].EndX).SGT ((maxScopeLength - mpc.DeadBandWidth) / 2.0) &&
+                     (mpc.mGC.Heads == MCSettings.EHeads.Left || mpc.mGC.Heads == MCSettings.EHeads.Right)) {
                      (mpc.ToolingScopes, split2) = CutScope.SplitToolingScopesAtIxn (mpc.ToolingScopes, mpc, endXPos, mpc.Bound,
                         mpc.mGC, thresholdLength: maxScopeLength, splitNotches: true, splitNonNotches: false); // TODO non notches was true, I nmade it false
 
@@ -1387,19 +1336,18 @@ namespace ProfileCAM.Core.GCodeGen {
                            if (mpc.mGC.Heads == MCSettings.EHeads.Both)
                               endXPos = startXPos + maxScopeLength;
                            else if (mpc.mGC.Heads == MCSettings.EHeads.Left || mpc.mGC.Heads == MCSettings.EHeads.Right)
-                              endXPos = startXPos + ((maxScopeLength - mpc.DeadBandWidth) / 2.0);
+                              endXPos = startXPos + (maxScopeLength - mpc.DeadBandWidth) / 2.0;
                            overrideMinNotchCutOption = true;
                         } else {
                            singularEndXPositions.Add (endXPos);
                            if (mpc.mGC.Heads == MCSettings.EHeads.Both)
                               endXPos = startXPos + maxScopeLength;  // TODO Check. Previously this was endXPos = maxScopeLength;
                            else if (mpc.mGC.Heads == MCSettings.EHeads.Left || mpc.mGC.Heads == MCSettings.EHeads.Right)
-                              endXPos = startXPos + ((maxScopeLength - mpc.DeadBandWidth) / 2.0);
+                              endXPos = startXPos + (maxScopeLength - mpc.DeadBandWidth) / 2.0;
                         }
                         endXPosChanged = true;
                      }
                   }
-               }
                if (endXPosChanged || toolScopesSplit) {
                   if (Math.Abs (startXPos - endXPos).EQ (0)) throw new Exception ("GetQuasiOptimalCutScopes: Start and end position are the same");
                   cs = new (startXPos, 0, endXPos, mpc.Model.Bound, maxScopeLength, mpc.DeadBandWidth, ref mpc, mpc.mIsLeftToRight);
@@ -1407,8 +1355,7 @@ namespace ProfileCAM.Core.GCodeGen {
                   featsWithIn = GetUncutToolingScopesWithin (cs, tss);
                   currDBScope = cs.DeadBandScope;
                }
-               if ((maximizeScopeLength || overrideMinNotchCutOption) && ixnHolesIdxs.Count == 0 && ixnNotches.Count > 0) {
-                  // In the case of maximizeScopeLength = true AND
+               if ((maximizeScopeLength || overrideMinNotchCutOption) && ixnHolesIdxs.Count == 0 && ixnNotches.Count > 0)                   // In the case of maximizeScopeLength = true AND
                   // notches still existing to cut. Perform the split here
                   // If maximum scope length is to be maximized, the toolscopes of notches
                   // have to be split. Unless, startXPos needs to be modified
@@ -1426,7 +1373,6 @@ namespace ProfileCAM.Core.GCodeGen {
                         tss = mpc.ToolingScopes;
                      }
                   }
-               }
                if (split1 || split2) {
                   cs.ToolingScopes = mpc.ToolingScopes;
                   cs.CategorizeToolings ();
@@ -1446,10 +1392,8 @@ namespace ProfileCAM.Core.GCodeGen {
                   .Where (index => index >= 0 && index < tss.Count) // Ensure index is valid
                   .Select (index => tss[index])
                   .ToList ();
-               for (int nn = 0; nn < toolingScopesToBeMachined.Count; nn++) {
-                  if (toolingScopesToBeMachined[nn].Tooling.IsNotch ())
+               for (int nn = 0; nn < toolingScopesToBeMachined.Count; nn++)                   if (toolingScopesToBeMachined[nn].Tooling.IsNotch ())
                      toolingScopesToBeMachined[nn].IsNotchSplitComplete = true;
-               }
                cs.MachinableToolingScopes = toolingScopesToBeMachined;
                foreach (var tsc in cs.MachinableToolingScopes) {
                   if (processedTSSKVPairs.ContainsKey (tsc))
@@ -1504,24 +1448,20 @@ namespace ProfileCAM.Core.GCodeGen {
 
                // Find the ToolScope in mpc.toolscopes which equals the dictionary item
                ToolingScope foundToolScope = null;
-               foreach (var mpcTs in mpc.ToolingScopes) {
-                  if (mpcTs == currentToolScope) {
+               foreach (var mpcTs in mpc.ToolingScopes)                   if (mpcTs == currentToolScope) {
                      foundToolScope = mpcTs;
                      break;
                   }
-               }
-               if (foundToolScope != null) {
-                  // Check if the found ToolScope is marked as processed
+               if (foundToolScope != null)                   // Check if the found ToolScope is marked as processed
                   if (!foundToolScope.IsProcessed)
                      throw new Exception ($"Tooling scope for the current item is not marked for cut. Error in optimization detected.");
-               } else
+else
                   throw new Exception ($"Tooling scope not found in mpc.toolscopes for the given dictionary key.");
             }
             //var dbb = cs.DeadBandScope;
             var forwardIxnHoles = cs.GetForwardIxnHoles ();
             var featsWithinByEndX = featsWithIn.OrderBy (t => t.EndX).ToList ();
-            if (mpc.mGC.Heads == MCSettings.EHeads.Both) {
-               if (passType == PassType.CutScope) {
+            if (mpc.mGC.Heads == MCSettings.EHeads.Both)                if (passType == PassType.CutScope) {
                   // The next pass is to move utp the deadband beginning and
                   // the cutscope width is the width of dead band.
                   var dbTScopesAscStartX = GetDeadBandToolingScopes (cs, tss);
@@ -1529,8 +1469,8 @@ namespace ProfileCAM.Core.GCodeGen {
                   if (dbTScopesAscStartX.Count > 0) {
                      var stxToolScPos = dbTScopesAscStartX[0].StartX;
                      var endxToolScPos = dbTScopesAscEndX[^1].EndX;
-                     startXPos += ((endxToolScPos - stxToolScPos) < cs.DeadBandWidth ? cs.DeadBandWidth : (endxToolScPos - stxToolScPos));
-                     endXPos += ((endxToolScPos - stxToolScPos) < cs.DeadBandWidth ? cs.DeadBandWidth : (endxToolScPos - stxToolScPos));
+                     startXPos += endxToolScPos - stxToolScPos < cs.DeadBandWidth ? cs.DeadBandWidth : endxToolScPos - stxToolScPos;
+                     endXPos += endxToolScPos - stxToolScPos < cs.DeadBandWidth ? cs.DeadBandWidth : endxToolScPos - stxToolScPos;
                   } else {
                      if (featsWithinByEndX.Count > 0) startXPos = featsWithinByEndX[^1].EndX;
                      else if (forwardIxnHoles.Count > 0)
@@ -1549,22 +1489,20 @@ namespace ProfileCAM.Core.GCodeGen {
                   if (dbTScopesAscStartX.Count > 0) {
                      var stxToolScPos = dbTScopesAscStartX[0].StartX;
                      var endxToolScPos = dbTScopesAscEndX[^1].EndX;
-                     startXPos += ((endxToolScPos - stxToolScPos) < cs.DeadBandWidth ? cs.DeadBandWidth : (endxToolScPos - stxToolScPos));
-                     endXPos += ((endxToolScPos - stxToolScPos) < cs.DeadBandWidth ? cs.DeadBandWidth : (endxToolScPos - stxToolScPos));
-                  } else {
-                     if (forwardIxnHoles.Count > 0)
+                     startXPos += endxToolScPos - stxToolScPos < cs.DeadBandWidth ? cs.DeadBandWidth : endxToolScPos - stxToolScPos;
+                     endXPos += endxToolScPos - stxToolScPos < cs.DeadBandWidth ? cs.DeadBandWidth : endxToolScPos - stxToolScPos;
+                  } else                      if (forwardIxnHoles.Count > 0)
                         endXPos = forwardIxnHoles.First ().StartX;
                      else
                         startXPos = cs.EndX;
-                  }
                   passType = PassType.CutScope;
                   if (forwardIxnHoles.Count > 0)
                      endXPos = forwardIxnHoles.First ().StartX;
                   else
                      endXPos = Math.Min (startXPos + maxScopeLength, mpc.XMax);
                }
-            } else if (mpc.mGC.Heads == MCSettings.EHeads.Left || mpc.mGC.Heads == MCSettings.EHeads.Right) {
-               if (featsWithinByEndX.Count > 0 && featsWithinByEndX[^1].EndX.SGT (startXPos + ((maxScopeLength - mpc.DeadBandWidth) / 2.0)))
+else if (mpc.mGC.Heads == MCSettings.EHeads.Left || mpc.mGC.Heads == MCSettings.EHeads.Right) {
+               if (featsWithinByEndX.Count > 0 && featsWithinByEndX[^1].EndX.SGT (startXPos + (maxScopeLength - mpc.DeadBandWidth) / 2.0))
                   throw new Exception ("In GetQuasiOptimalCutScopes: For Left Head, the EndX of last Feature is more than stX+(msl-db)/2");
                // For SM RH 7101AAM00890N_C.igs, at a stage, the count of featsWithinByEndX is 0. 
                // In such cases, next StartX is set directly to endX.
@@ -1573,7 +1511,7 @@ namespace ProfileCAM.Core.GCodeGen {
                   startXPos = endXPos;
                else
                   startXPos = featsWithinByEndX[^1].EndX;
-               endXPos = startXPos + ((maxScopeLength - mpc.DeadBandWidth) / 2.0);
+               endXPos = startXPos + (maxScopeLength - mpc.DeadBandWidth) / 2.0;
             }
 
             offset = 0;
@@ -1590,14 +1528,9 @@ namespace ProfileCAM.Core.GCodeGen {
             // Find the ToolScope in mpc.toolscopes which equals the dictionary item
             ToolingScope foundToolScope = mpc.ToolingScopes.FirstOrDefault (ts => ts == currentToolScope);
 
-            if (foundToolScope != null) {
-               // Check if the found ToolScope is marked as processed
-               if (!foundToolScope.IsProcessed) {
-                  throw new Exception ($"Tooling scope for the current item is not marked for cut. Error in optimization detected.");
-               }
-            } else {
-               throw new Exception ($"Tooling scope not found in mpc.toolscopes for the given dictionary key.");
-            }
+            if (foundToolScope != null)                // Check if the found ToolScope is marked as processed
+               if (!foundToolScope.IsProcessed)                   throw new Exception ($"Tooling scope for the current item is not marked for cut. Error in optimization detected.");
+else                throw new Exception ($"Tooling scope not found in mpc.toolscopes for the given dictionary key.");
          }
          return resCSS;
       }
@@ -1618,8 +1551,7 @@ namespace ProfileCAM.Core.GCodeGen {
          int[] prev = new int[n + 1];
          Array.Fill (prev, -1);
 
-         for (int k = 1; k <= n; ++k) {
-            // try every possible previous cut-scope ending at j (0-based)
+         for (int k = 1; k <= n; ++k)             // try every possible previous cut-scope ending at j (0-based)
             for (int j = 0; j < k; ++j) {
                // shape indices inside this scope: j+1 … k  (1-based)
                // length of the scope = x[k-1] - x[j]
@@ -1634,7 +1566,6 @@ namespace ProfileCAM.Core.GCodeGen {
                   prev[k] = j;
                }
             }
-         }
 
          if (dp[n] == double.PositiveInfinity)
             throw new InvalidOperationException ("No feasible partitioning (L too small?).");
@@ -1642,8 +1573,8 @@ namespace ProfileCAM.Core.GCodeGen {
          // ---- reconstruct the cut-scopes ----
          List<CutScope> scopes = new List<CutScope> ();
          int cur = n;
-         double deadZoneXmin = MaximumScopeLength / 2 - (MCSettings.It.DeadbandWidth / 2);
-         double deadZoneXmax = MaximumScopeLength / 2 + (MCSettings.It.DeadbandWidth / 2);
+         double deadZoneXmin = MaximumScopeLength / 2 - MCSettings.It.DeadbandWidth / 2;
+         double deadZoneXmax = MaximumScopeLength / 2 + MCSettings.It.DeadbandWidth / 2;
          while (cur > 0) {
             int prevEnd = prev[cur];                        // index of last shape of previous scope
             scopes.Add (new CutScope (unProcessedTS[prevEnd].StartX, unProcessedTS[cur - 1].EndX,
@@ -1673,8 +1604,8 @@ namespace ProfileCAM.Core.GCodeGen {
       double maxScopeLength, double minXWorkPiece, double maxXWorkPiece,
       Bound3 bbox, bool maximizeScopeLength, double minimumThresholdNotchLength) {
          (double Time, List<CutScope> Seq) bestCutScopeSeq = (0, []);
-         double deadZoneXmin = maxScopeLength / 2 - (MCSettings.It.DeadbandWidth / 2);
-         double deadZoneXmax = maxScopeLength / 2 + (MCSettings.It.DeadbandWidth / 2);
+         double deadZoneXmin = maxScopeLength / 2 - MCSettings.It.DeadbandWidth / 2;
+         double deadZoneXmax = maxScopeLength / 2 + MCSettings.It.DeadbandWidth / 2;
 
          List<ToolingScope> unProcessedTS = mpc.ToolingScopes.Where (ts => !ts.IsProcessed).OrderBy (x => x.EndX).ToList ();
 
@@ -1741,12 +1672,10 @@ namespace ProfileCAM.Core.GCodeGen {
          List<ToolingScope> tssH1 = [];
          List<ToolingScope> tssH2 = [];
 
-         for (int i = 0; i < splitTSS.Count && splitTSS[i].EndX <= scopeMax; i++) {
-            if (start <= splitTSS[i].StartX && splitTSS[i].EndX <= deadMin)
+         for (int i = 0; i < splitTSS.Count && splitTSS[i].EndX <= scopeMax; i++)             if (start <= splitTSS[i].StartX && splitTSS[i].EndX <= deadMin)
                tssH1.Add (splitTSS[i]);
             else if (deadMax <= splitTSS[i].StartX && splitTSS[i].EndX <= scopeMax)
                tssH2.Add (splitTSS[i]);
-         }
 
          Point3 preH1 = Point3.Nil, preH2 = Point3.Nil;
          double timeH1 = 0, timeH2 = 0;
@@ -1809,15 +1738,13 @@ namespace ProfileCAM.Core.GCodeGen {
             processedTS.GetRange (0, i + 1).ForEach (ts => newUnProcessedTS.Remove (ts));
             (double Time, List<CutScope> Seq) newCutSeq = (cutSequence.Time + cutscope.ProcessTime, [.. cutSequence.Seq, cutscope]);
 
-            if (newUnProcessedTS.Count == 0) {
-               if (bestSubSeq.Seq.Count == 0 || cutscope.ProcessTime < bestSubSeq.Time) {
+            if (newUnProcessedTS.Count == 0)                if (bestSubSeq.Seq.Count == 0 || cutscope.ProcessTime < bestSubSeq.Time) {
                   bestSubSeq = (cutscope.ProcessTime, [cutscope]);
                   double seqTime = bestSubSeq.Time + cutSequence.Time;
                   if (mBestSeqTime > seqTime) mBestSeqTime = seqTime;
                   if (mBestSeqCount > cutSequence.Seq.Count) mBestSeqCount = cutSequence.Seq.Count;
                   break;
                }
-            }
 
             double startx = newUnProcessedTS.Min (ts => ts.StartX);
             string seqKey = $"S : {startx}, uts : {string.Join (",", newUnProcessedTS.Select (ts => ts.Index)).GetHashCode ()}";
@@ -1829,20 +1756,18 @@ namespace ProfileCAM.Core.GCodeGen {
             }
 
             if (subSeq.Seq.Count == 0) continue;
-            if (bestSubSeq.Seq.Count == 0 || cutscope.ProcessTime + subSeq.Time < bestSubSeq.Time) {
-               bestSubSeq = (cutscope.ProcessTime + subSeq.Time, [cutscope, .. subSeq.Seq]);
-            }
+            if (bestSubSeq.Seq.Count == 0 || cutscope.ProcessTime + subSeq.Time < bestSubSeq.Time)                bestSubSeq = (cutscope.ProcessTime + subSeq.Time, [cutscope, .. subSeq.Seq]);
          }
       }
 
       List<CutScope> GetSpatialOptimizationCutscopes (ref MultiPassCuts mpc, bool isLeftToRight,
       double maxScopeLength, double minXWorkPiece, double maxXWorkPiece,
       Bound3 bbox, bool maximizeScopeLength, double minimumThresholdNotchLength) {
-         int maxCutScopesCount = ((int)(maxXWorkPiece / maxScopeLength)) * 3;
+         int maxCutScopesCount = (int)(maxXWorkPiece / maxScopeLength) * 3;
          List<CutScope> cutScopeSeq = [];
          double tolIncrement = maxScopeLength / 100, tol = 0;
-         double deadZoneXmin = maxScopeLength / 2 - (MCSettings.It.DeadbandWidth / 2);
-         double deadZoneXmax = maxScopeLength / 2 + (MCSettings.It.DeadbandWidth / 2);
+         double deadZoneXmin = maxScopeLength / 2 - MCSettings.It.DeadbandWidth / 2;
+         double deadZoneXmax = maxScopeLength / 2 + MCSettings.It.DeadbandWidth / 2;
 
          do {
             cutScopeSeq = [];
