@@ -2,11 +2,12 @@
 using ProfileCAM.Core.Tools;
 using Flux.API;
 using ProfileCAM.Core.GCodeGen.LCMMultipass2HLegacy;
+using ProfileCAM.Core.GCodeGen;
 
-namespace ProfileCAM.Core.Processes {
+namespace ProfileCAM.Core.Processes.LCMMultipass2HLegacy {
    /// <summary>GenesysHub is used to generate G-Code, and the Traces for simulation</summary>
    #nullable enable
-   public class GenesysHub : INotifyPropertyChanged {
+   public class GenesysHub4LCMMultipass2HLegacy : IGenesysHub {
       #region G Code Drawables and Utilities
       List<List<GCodeSeg>> mTraces = [[], []];
       public List<List<GCodeSeg>> Traces { get => mTraces; }
@@ -42,10 +43,10 @@ namespace ProfileCAM.Core.Processes {
       #endregion
 
       #region Constructor
-      public GenesysHub () {
+      public GenesysHub4LCMMultipass2HLegacy () {
          MachiningTool = new Nozzle (9.0, 100.0, 100);
-         mGCodeGenerator = new GCodeGenerator (this, true/* Left to right machining*/);
-         mGCodeParser = new GCodeParser ();
+         mGCodeGenerator = new GCodeGenerator4LCMMultipass2HLegacy (this, true/* Left to right machining*/);
+         mGCodeParser = new GCodeParser4LCMMultipass2HLegacy ();
          CutHoles = true;
          CutMark = true;
          CutNotches = true;
@@ -72,9 +73,9 @@ namespace ProfileCAM.Core.Processes {
       #endregion
 
       #region GCode Generator and Utilities
-      GCodeParser mGCodeParser;
-      readonly GCodeGenerator mGCodeGenerator;
-      public GCodeGenerator GCodeGen { get => mGCodeGenerator; }
+      GCodeParser4LCMMultipass2HLegacy mGCodeParser;
+      readonly IGCodeGenerator mGCodeGenerator;
+      public IGCodeGenerator GCodeGen { get => mGCodeGenerator; }
       public void ClearZombies () {
          ClearTraces ();
          mGCodeGenerator.ClearZombies ();
@@ -83,7 +84,7 @@ namespace ProfileCAM.Core.Processes {
          try {
             mGCodeParser.Parse (filename);
          } catch (Exception e) {
-            string formattedString = String.Format ("Parsing GCode file {0} failed. Error: {1}", filename, e.Message);
+            string formattedString = string.Format ("Parsing GCode file {0} failed. Error: {1}", filename, e.Message);
             throw new Exception (formattedString);
          }
          mTraces[0] = mGCodeParser.Traces[0];
@@ -97,7 +98,7 @@ namespace ProfileCAM.Core.Processes {
       /// used for testing, and create always a partition at 0.5. Otherwise, we use a 
       /// dynamically computed optimal partitioning
       //public void ComputeGCode (bool testing = false, double ratio = 0.5) {
-      public void ComputeGCode (bool testing = false) {
+      public void ComputeGCode (bool testing /*= false*/) {
          ClearZombies ();
          mTraces = Utils.ComputeGCode (mGCodeGenerator, testing);
       }

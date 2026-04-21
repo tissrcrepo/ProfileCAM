@@ -82,7 +82,7 @@ namespace ProfileCAM.Core {
                ent.Xform (xfm);
          }
 
-         GCodeGenerator.EvaluateToolConfigXForms (this);
+         Utils.EvaluateToolConfigXForms (this);
       }
       public void DeleteCuts () => Cuts.Clear ();
       public bool DoAddHoles () {
@@ -107,12 +107,12 @@ namespace ProfileCAM.Core {
                Tooling cut = new (this, ep, shape, EKind.Hole);
                var name = $"Tooling-{cutIndex++}";
                var featType = $"{Utils.GetFlangeType (cut,
-                  GCodeGenerator.GetXForm (this))} - {cut.Kind}";
+                  Utils.GetXForm (this))} - {cut.Kind}";
                cut.Name = name;
                cut.FeatType = featType;
                bool toTreatAsCutOut = CutOut.ToTreatAsCutOut (cut.Segs, Bound, It.MinCutOutLengthThreshold);
                if (toTreatAsCutOut) {
-                  cut.CutoutKind = Tooling.GetCutKind (cut, GCodeGenerator.GetXForm (this));
+                  cut.CutoutKind = Tooling.GetCutKind (cut, Utils.GetXForm (this));
                   cut.ProfileKind = Tooling.GetCutKind (cut, XForm4.IdentityXfm, profileKind: true);
                   cut.Kind = EKind.Cutout;
                }
@@ -134,7 +134,7 @@ namespace ProfileCAM.Core {
                Cuts.Add (new Tooling (this, ef, shape, EKind.Hole));
                Cuts[^1].Name = $"Tooling-{cutIndex++}";
                Cuts[^1].FeatType = $"{Utils.GetFlangeType (Cuts[^1],
-                  GCodeGenerator.GetXForm (this))} - {Cuts[^1].Kind}";
+                  Utils.GetXForm (this))} - {Cuts[^1].Kind}";
             }
          }
 
@@ -150,7 +150,7 @@ namespace ProfileCAM.Core {
             var cutSegs = cut.Segs.ToList ();
             bool yNegFlex = cutSegs.Any (cutSeg => cutSeg.Vec0.Normalized ().Y < -0.1);
             if (cut.Kind == EKind.Hole && Utils.GetFlangeType (cut,
-               GCodeGenerator.GetXForm (this)) == Utils.EFlange.Flex) {
+               Utils.GetXForm (this)) == Utils.EFlange.Flex) {
                Vector3 n = new (0.0, Sqrt (2.0), Sqrt (2.0));
                Point3 q = new (0.0, mBound.YMax - 10.0, mBound.ZMax + 10.0);
                if (yNegFlex) {
@@ -208,7 +208,7 @@ namespace ProfileCAM.Core {
             Cuts.Add (new Tooling (this, mModel.Baseplane, p2, EKind.Mark));
             Cuts[^1].Name = $"Tooling-{cutIndex++}";
             Cuts[^1].FeatType = $"{Utils.GetFlangeType (Cuts[^1],
-                                   GCodeGenerator.GetXForm (this))} - {Cuts[^1].Kind}";
+                                   Utils.GetXForm (this))} - {Cuts[^1].Kind}";
 
             // Calculate the bound3 for each cut
             Cuts[^1].Bound3 = Utils.CalculateBound3 ([.. Cuts[^1].Segs], Model.Bound);
@@ -360,7 +360,7 @@ namespace ProfileCAM.Core {
                }
             }
             cut.FeatType = $"{Utils.GetFlangeType (cut,
-                                                   GCodeGenerator.GetXForm (this))} - {cut.Kind}";
+                                                   Utils.GetXForm (this))} - {cut.Kind}";
             var cutSegs = cut.Segs.ToList ();
             if (cut.Kind == EKind.Cutout || cut.Kind == EKind.Hole) {
                if (!It.CutCutouts)
@@ -372,7 +372,7 @@ namespace ProfileCAM.Core {
                // in 45 deg or -45 deg. The windiwng of the polygon on the projected plane is used
                // to check if the Traces of the tooling has to be reversed.
                Vector3 n = Utils.GetEPlaneNormal (cut,
-                                                  GCodeGenerator.GetXForm (this));
+                                                  Utils.GetXForm (this));
                Point3 q = new (0.0, mBound.YMax + 10.0, mBound.ZMax + 10.0);
                bool yNegFlexFeat = cutSegs.Any (cutSeg => cutSeg.Vec0.Normalized ().Y < -0.1);
                if (yNegFlexFeat)
@@ -381,17 +381,17 @@ namespace ProfileCAM.Core {
                if (Geom.GetToolingWinding (n, q, cutSegs) == Geom.ToolingWinding.CW)
                   cut.Reverse ();
                cutSegs = [.. cut.Segs];
-               cut.CutoutKind = Tooling.GetCutKind (cut, GCodeGenerator.GetXForm (this));
+               cut.CutoutKind = Tooling.GetCutKind (cut, Utils.GetXForm (this));
                cut.ProfileKind = Tooling.GetCutKind (cut, XForm4.IdentityXfm, profileKind: true);
             } else {
                if (!It.CutNotches)
                   continue;
-               cut.NotchKind = Tooling.GetCutKind (cut, GCodeGenerator.GetXForm (this));
+               cut.NotchKind = Tooling.GetCutKind (cut, Utils.GetXForm (this));
                cut.ProfileKind = Tooling.GetCutKind (cut, XForm4.IdentityXfm, profileKind: true);
                var NotchStFlType = Utils.GetArcPlaneFlangeType (cutSegs.First ().Vec0,
-                                                                GCodeGenerator.GetXForm (this));
+                                                                Utils.GetXForm (this));
                var NotchEndFlType = Utils.GetArcPlaneFlangeType (cutSegs[^1].Vec1,
-                                                                 GCodeGenerator.GetXForm (this));
+                                                                 Utils.GetXForm (this));
                // If the notch starts on a flange and ends on the same flange
                if (cut.ProfileKind == ECutKind.Top2YPos || cut.ProfileKind == ECutKind.Top2YNeg) {
                   if (cutSegs[0].Vec0.Normalized ().EQ (cutSegs[^1].Vec1.Normalized ())) {

@@ -350,7 +350,7 @@ public class Tooling {
          if (this.IsFlexFeature ())
             return Utils.EFlange.Flex;
          else {
-            return Utils.GetArcPlaneFlangeType (this.ExtractSegs.First ().Vec0, GCodeGenerator.GetXForm (Work));
+            return Utils.GetArcPlaneFlangeType (this.ExtractSegs.First ().Vec0, Utils.GetXForm (Work));
          }
       }
    }

@@ -27,7 +27,7 @@ public struct NotchAttribute (FCCurve3 crv, Vector3 stNormal, Vector3 endNormal,
 }
 
 public class MachinableCutScope {
-   public MachinableCutScope (CutScope cs, GCodeGenerator gCGen) {
+   public MachinableCutScope (CutScope cs, IGCodeGenerator gCGen) {
       ArgumentNullException.ThrowIfNull (cs);
       CutScope = cs;
       ToolingScopes = cs.MachinableToolingScopes;
@@ -36,12 +36,12 @@ public class MachinableCutScope {
       EndX = cs.EndX;
       GCGen = gCGen;
       if (!(cs.TSInScope1?.Count > 0 || cs.TSInScope2?.Count > 0))
-         GCodeGenerator.CreatePartition (GCGen, ToolingScopes, MCSettings.It.OptimizePartition, cs.Bound);
+         Utils.CreatePartition (GCGen, ToolingScopes, MCSettings.It.OptimizePartition, cs.Bound);
       SetData ();
       Toolings = [.. ToolingScopes.Select (ts => ts.Tooling)];
       Bound = cs.Bound;
    }
-   public MachinableCutScope (List<Tooling> toolings, GCodeGenerator gCGen) {
+   public MachinableCutScope (List<Tooling> toolings, IGCodeGenerator gCGen) {
       CutScope = null;
       ToolingScopes = ToolingScope.CreateToolingScopes (toolings);
       mScopeWidth = ToolingScopes.Sum (t => (t.EndX - t.StartX));
@@ -50,7 +50,7 @@ public class MachinableCutScope {
       GCGen = gCGen;
       Toolings = [.. ToolingScopes.Select (ts => ts.Tooling)];
       Bound = Utils.CalculateBound3 (Toolings);
-      GCodeGenerator.CreatePartition (GCGen, ToolingScopes, MCSettings.It.OptimizePartition, Bound);
+      Utils.CreatePartition (GCGen, ToolingScopes, MCSettings.It.OptimizePartition, Bound);
       SetData ();
    }
 
@@ -64,7 +64,7 @@ public class MachinableCutScope {
       ToolingsHead2 = [.. ToolingScopes.Select (ts => ts.Tooling).Where (ts => ts.Head == 1)];
    }
    public CutScope CutScope { get; set; }
-   public GCodeGenerator GCGen { get; set; }
+   public IGCodeGenerator GCGen { get; set; }
    public List<ToolingScope> ToolingScopes { get; set; }
    public double StartX { get; private set; }
    public double EndX { get; private set; }
@@ -78,7 +78,7 @@ public class MachinableCutScope {
    public double ToolingScopesWidthH2 { get; set; }
    public List<ToolingScope> ToolingScopesH1 { get; private set; }
    public List<ToolingScope> ToolingScopesH2 { get; private set; }
-   public static List<MachinableCutScope> CreateMachinableCutScopes (List<CutScope> css, GCodeGenerator gcGen) =>
+   public static List<MachinableCutScope> CreateMachinableCutScopes (List<CutScope> css, IGCodeGenerator gcGen) =>
       [.. css.Select (cs => new MachinableCutScope (cs, gcGen))];
    public Bound3 Bound { get; private set; }
 }
@@ -114,11 +114,11 @@ internal static class Extensions {
 
    public static string GetGCodeComment (this Point3 val, string token) {
       var s = $"{token} {{ {val.X.Round (3)}, {val.Y.Round (3)}, {val.Z.Round (3)} }}";
-      return GCodeGenerator.GetGCodeComment (s);
+      return Utils.GetGCodeComment (s);
    }
    public static string GetGCodeComment (this Point2 val, string token) {
       var s = $"{token} {{ {val.X.Round (3)}, {val.Y.Round (3)} }}";
-      return GCodeGenerator.GetGCodeComment (s);
+      return Utils.GetGCodeComment (s);
    }
    public static bool IsSameSense (this Vector3 vec1, Vector3 vec2) {
       if (vec1.Opposing (vec2)) return false;
@@ -268,7 +268,8 @@ public enum ERotate {
 
 public enum MachineType {
    LCMLegacy,
-   LCMMultipass2H
+   LCMMultipass2H,
+   LCMMultipass2HNoDB
 }
 
 public enum EGCode {
@@ -405,16 +406,16 @@ public class GCodeSeg {
       mToolingName = toolingName;
    }
 
-   public void XfmToMachine (GCodeGenerator codeGen) {
-      mStartPoint = GCodeGenerator.XfmToMachine (codeGen, mStartPoint);
-      mEndPoint = GCodeGenerator.XfmToMachine (codeGen, mEndPoint);
-      mStartNormal = GCodeGenerator.XfmToMachineVec (codeGen, mStartNormal);
-      mEndNormal = GCodeGenerator.XfmToMachineVec (codeGen, mEndNormal);
+   public void XfmToMachine (IGCodeGenerator codeGen) { // TODO remove argument
+      mStartPoint = Utils.XfmToMachine (codeGen, mStartPoint);
+      mEndPoint = Utils.XfmToMachine (codeGen, mEndPoint);
+      mStartNormal = Utils.XfmToMachineVec (codeGen, mStartNormal);
+      mEndNormal = Utils.XfmToMachineVec (codeGen, mEndNormal);
       if (IsArc ())
-         mCenter = GCodeGenerator.XfmToMachine (codeGen, mCenter);
+         mCenter = Utils.XfmToMachine (codeGen, mCenter);
    }
 
-   public GCodeSeg XfmToMachineNew (GCodeGenerator codeGGen) {
+   public GCodeSeg XfmToMachineNew (IGCodeGenerator codeGGen) {
       GCodeSeg seg = new (this);
       seg.XfmToMachine (codeGGen);
       return seg;
@@ -522,17 +523,17 @@ public static class Utils {
       return 1;
    }
 
-   public static int GetAngleSignAbtX (Vector3 stNormal, Vector3 endNormal, Workpiece wp, GCodeGenerator gcGen) {
-      var stN = GCodeGenerator.GetXForm (wp, gcGen) * stNormal.Normalized ();
-      var endN = GCodeGenerator.GetXForm (wp, gcGen) * endNormal.Normalized ();
+   public static int GetAngleSignAbtX (Vector3 stNormal, Vector3 endNormal, Workpiece wp, IGCodeGenerator gcGen) {
+      var stN = Utils.GetXForm (wp, gcGen) * stNormal.Normalized ();
+      var endN = Utils.GetXForm (wp, gcGen) * endNormal.Normalized ();
       var cross = Geom.Cross (stN, endN).Normalized ();
       if (!cross.IsZero && cross.Opposing (XForm4.mXAxis)) return -1;
       return 1;
    }
 
-   public static int GetAngleSignAbtX (Point3 stPoint, Point3 endPoint, Workpiece wp, GCodeGenerator gcGen) {
-      var stN = GCodeGenerator.GetXForm (wp, gcGen) * Geom.P2V (stPoint).Normalized ();
-      var endN = GCodeGenerator.GetXForm (wp, gcGen) * Geom.P2V (endPoint).Normalized ();
+   public static int GetAngleSignAbtX (Point3 stPoint, Point3 endPoint, Workpiece wp, IGCodeGenerator gcGen) {
+      var stN = Utils.GetXForm (wp, gcGen) * Geom.P2V (stPoint).Normalized ();
+      var endN = Utils.GetXForm (wp, gcGen) * Geom.P2V (endPoint).Normalized ();
       var cross = Geom.Cross (stN, endN).Normalized ();
       if (!cross.IsZero && cross.Opposing (XForm4.mXAxis)) return -1;
       return 1;
@@ -2106,7 +2107,7 @@ public static class Utils {
       }
 
       gCodeComment = NormalizeNegativeZero (gCodeComment);
-      sw.WriteLine (GCodeGenerator.GetGCodeComment (gCodeComment));
+      sw.WriteLine (Utils.GetGCodeComment (gCodeComment));
       return gCodeStatement + gCodeComment;
    }
 
@@ -2193,7 +2194,7 @@ public static class Utils {
    /// <returns>Returns the List of G Codes, for Head 1 and Head 2, generated for each cut scope. 
    /// For a single pass legacy, the wrapper list holds only one Cut Scope's G Codes for Head 1 and Head 2</returns>
 #nullable enable
-   public static List<List<GCodeSeg>> ComputeGCode (GCodeGenerator gcodeGen, bool testing = false, double tol = 1e-6) {
+   public static List<List<GCodeSeg>> ComputeGCode (IGCodeGenerator gcodeGen, bool testing = false, double tol = 1e-6) {
       List<List<GCodeSeg>> traces = [[], []];
 
       if (gcodeGen.Process.Workpiece == null)
@@ -2246,8 +2247,8 @@ public static class Utils {
          var prevVal = gcodeGen.EnableMultipassCut;
          gcodeGen.EnableMultipassCut = false;
          gcodeGen.CreatePartition (gcodeGen.Process.Workpiece.Cuts, gcodeGen.OptimizePartition, gcodeGen.Process.Workpiece.Model.Bound);
-         gcodeGen.GenerateGCode (GCodeGenerator.ToolHeadType.Master);
-         gcodeGen.GenerateGCode (GCodeGenerator.ToolHeadType.Slave);
+         gcodeGen.GenerateGCode (IGCodeGenerator.ToolHeadType.Master);
+         gcodeGen.GenerateGCode (IGCodeGenerator.ToolHeadType.Slave);
          traces[0] = gcodeGen.CutScopeTraces[0][0];
          traces[1] = gcodeGen.CutScopeTraces[0][1];
          gcodeGen.EnableMultipassCut = prevVal;
@@ -2789,5 +2790,78 @@ public static class Utils {
       if (tss.Count == 0)
          return null;
       return new PointVec (tss[index].Tooling.Segs[^1].Curve.Start, tss[index].Tooling.Segs[^1].Vec0.Normalized ());
+   }
+
+   public static void EvaluateToolConfigXForms (Workpiece work) {
+      // For LH Component
+      if (Utils.sXformLHInv == null || Utils.sXformRHInv == null) {
+         Utils.sXformLHInv = new XForm4 ();
+         Utils.sXformRHInv = new XForm4 ();
+         var flangeThickness = work.Model.Entities.OfType<E3Plane> ().ToList ().First ().ThickVector.Length;
+         Utils.sXformLHInv.Translate (new Vector3 (0.0, work.Bound.YMin, flangeThickness));
+         //if (mcName == "LMMultipass2H")
+         //Utils.sXformLHInv.SetRotationComponents (new Vector3 (-1, 0, 0), new Vector3 (0, -1, 0), new Vector3 (0, 0, 1));
+         Utils.sXformLHInv.Invert ();
+         // For RH component
+         Utils.sXformRHInv.Translate (new Vector3 (0.0, work.Bound.YMax, flangeThickness));
+         //if (mcName == "LMMultipass2H")
+         //Utils.sXformRHInv.SetRotationComponents (new Vector3 (-1, 0, 0), new Vector3 (0, -1, 0), new Vector3 (0, 0, 1));
+         Utils.sXformRHInv.Invert ();
+      }
+   }
+
+   public static XForm4 XfmToMachine (IGCodeGenerator codeGen, XForm4 xFormWCS) {
+      XForm4 mcXForm;
+      if (codeGen.PartConfigType == MCSettings.PartConfigType.LHComponent) mcXForm = Utils.sXformLHInv * xFormWCS;
+      else mcXForm = Utils.sXformRHInv * xFormWCS;
+      return mcXForm;
+   }
+
+   public static Vector3 XfmToMachineVec (IGCodeGenerator codeGen, Vector3 vecWRTWCS) {
+      Vector3 resVec;
+      if (codeGen.PartConfigType == MCSettings.PartConfigType.LHComponent) resVec = Utils.sXformLHInv * vecWRTWCS;
+      else resVec = Utils.sXformRHInv * vecWRTWCS;
+      return resVec;
+   }
+
+   public static void CreatePartition (IGCodeGenerator gcGen, List<ToolingScope> tss, bool optimize, Bound3 bound) {
+      var toolings = tss.Select (ts => ts.Tooling).ToList ();
+      gcGen.CreatePartition (toolings, optimize, bound);
+   }
+
+   /// <summary>
+   /// A utility method to create a G Code comment for a string input
+   /// </summary>
+   /// <param name="comment">The input string</param>
+   /// <returns>The G Code comment preceding "(" and succeeded by ")"</returns>
+   public static string GetGCodeComment (string comment) {
+      if (!String.IsNullOrEmpty (comment))
+         return " ( " + comment + " ) ";
+      else
+         return "";
+   }
+   public static Point3 XfmToMachine (IGCodeGenerator codeGen, Point3 ptWRTWCS) {
+      Vector3 resVec;
+      if (codeGen.PartConfigType == MCSettings.PartConfigType.LHComponent) resVec = Utils.sXformLHInv * ptWRTWCS;
+      else resVec = Utils.sXformRHInv * ptWRTWCS;
+      return Geom.V2P (resVec);
+   }
+   
+   /// <summary>
+   /// This is a handy static method to get the machine (inv) transform.
+   /// This should be used when judging if a flange/plane is top or bottom
+   /// and also while computing vector directions. This mathod is to be
+   /// called for vector direction computations, if the G Code generator is
+   /// not yet been initialized</summary>
+   /// <param name="wp">Workpiece object</param>
+   /// <param name="gcGen">G Code generator object. Can be null also</param>
+   /// <returns></returns>
+   public static XForm4 GetXForm (Workpiece wp, IGCodeGenerator gcGen = null) {
+      ArgumentNullException.ThrowIfNull (wp);
+      if (Utils.sXformLHInv == null || Utils.sXformRHInv == null)
+         Utils.EvaluateToolConfigXForms (wp);
+      if (gcGen == null)
+         return MCSettings.It.PartConfig == PartConfigType.LHComponent ? Utils.sXformLHInv : Utils.sXformRHInv;
+      return gcGen.PartConfigType == PartConfigType.LHComponent ? Utils.sXformLHInv : Utils.sXformRHInv;
    }
 }

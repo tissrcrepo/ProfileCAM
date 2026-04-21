@@ -699,7 +699,7 @@ namespace ProfileCAM.Core.GCodeGen.GCodeFeatures {
                            /*isToBeTreatedAsCutOut: mFeatureToBeTreatedAsCutout,*/ isValidNotch: false, cutoutSequence.StartIndex, cutoutSequence.EndIndex,
                            refSegIndex: 0, comment: "CutOutSequence: Machining Forward Direction", isShortPerimeterNotch: false, nextTs: null);
                      } else {
-                        string titleComment = GCodeGenerator.GetGCodeComment ("CutOutSequence: Machining Forward Direction");
+                        string titleComment = Utils.GetGCodeComment ("CutOutSequence: Machining Forward Direction");
                         GCGen.WriteLineStatement (titleComment);
                      }
                      if (ii == 0) {
@@ -913,7 +913,7 @@ namespace ProfileCAM.Core.GCodeGen.GCodeFeatures {
                         GCGen.EnableMachiningDirective ();
 
                      } else {
-                        string titleComment = GCodeGenerator.GetGCodeComment ("CutOutSequence: Machining Forward Direction");
+                        string titleComment = Utils.GetGCodeComment ("CutOutSequence: Machining Forward Direction");
                         GCGen.WriteLineStatement (titleComment);
                      }
 
@@ -945,7 +945,7 @@ namespace ProfileCAM.Core.GCodeGen.GCodeFeatures {
                            cutoutSequence.StartIndex,
                            cutoutSequence.EndIndex, refSegIndex: cutoutSequence.StartIndex,
                            "CutOutSequence: Flex machining Forward Direction", isShortPerimeterNotch: false, nextTs: null);
-                        GCGen.WriteLineStatement (GCodeGenerator.GetGCodeComment ("CutOutSequence: Machining in Flex in Forward Direction"));
+                        GCGen.WriteLineStatement (Utils.GetGCodeComment ("CutOutSequence: Machining in Flex in Forward Direction"));
                         var isFromWebFlange = IsMachiningFromWebFlange (ToolingSegments, cutoutSequence.StartIndex);
                         GCGen.WriteLineStatement ("ToolPlane\t( Confirm Cutting Plane )");
 

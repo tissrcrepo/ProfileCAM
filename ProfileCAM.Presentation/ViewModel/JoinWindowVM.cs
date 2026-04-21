@@ -7,6 +7,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
 
+
 namespace ProfileCAM.Presentation.ViewModel;
 public partial class JoinWindowVM : ObservableObject, IDisposable {
 
@@ -333,7 +334,7 @@ public partial class JoinWindowVM : ObservableObject, IDisposable {
    private string _joinedFileName = "";
 
    [ObservableProperty]
-   private BitmapImage _thumbnailBitmap;
+   private BitmapImage? _thumbnailBitmap = null;
    #endregion
 
    #region Fields

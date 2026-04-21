@@ -2,15 +2,14 @@
 using System.Windows.Threading;
 using ProfileCAM.Core;
 using ProfileCAM.Core.Geometries;
-using ProfileCAM.Core.Processes;
 using ProfileCAM.Core.Tools;
 using Flux.API;
-using ProfileCAM.Core.GCodeGen.LCMMultipass2HLegacy;
+using ProfileCAM.Core.Processes;
 
 
 namespace ProfileCAM.Presentation.Draw {
    using ToolConfigSpec = (XForm4 XForm, Point3 WayPt, EMove MoveType);
-   public class ProcessSimulator (GenesysHub gHub, Dispatcher dsp) : INotifyPropertyChanged {
+   public class ProcessSimulator (IGenesysHub gHub, Dispatcher dsp) : INotifyPropertyChanged {
       #region Enums
       public enum RefCSys {
          WCS,
@@ -55,7 +54,7 @@ namespace ProfileCAM.Presentation.Draw {
       #endregion
 
       #region External Refs
-      public GenesysHub GenesysHub { get; set; } = gHub;
+      public IGenesysHub GenesysHub { get; set; } = gHub;
       public Dispatcher Dispatch { get; set; } = dsp;
       //public List<List<GCodeSeg>[]> CutScopeTraces { get => GenesysHub.GCodeGen.CutScopeTraces; }
       #endregion
@@ -126,7 +125,7 @@ namespace ProfileCAM.Presentation.Draw {
          var (wayPt, wayVecAtPt) = waypointVec;
          var yComp = Geom.Cross (wayVecAtPt, XForm4.mXAxis).Normalized ();
          xFormRes = new XForm4 (XForm4.mXAxis, yComp, wayVecAtPt.Normalized (), Geom.P2V (wayPt));
-         if (ReferenceCS == RefCSys.MCS) xFormRes = GCodeGenerator.XfmToMachine (GenesysHub.GCodeGen, xFormRes);
+         if (ReferenceCS == RefCSys.MCS) xFormRes = Utils.XfmToMachine (GenesysHub.GCodeGen, xFormRes);
          if (mNextXFormIndex[head].gCodeSegIndex == GenesysHub.Traces[head].Count)
             return null;
          return (xFormRes, wayPt, GenesysHub.Traces[head][mNextXFormIndex[head].gCodeSegIndex].MoveType);

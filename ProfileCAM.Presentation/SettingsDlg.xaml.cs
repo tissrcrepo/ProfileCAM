@@ -129,7 +129,7 @@ public partial class SettingsDlg : Window, INotifyPropertyChanged {
          IsModified = true;
       });
       tbInputDirectoryWPath.Bind (() => {
-         return Settings.WMapLocation;
+         return Settings.WMapLocation ?? string.Empty;  // Convert null to empty string
       }, b => {
          Settings.WMapLocation = b;
          IsModified = true;
@@ -212,7 +212,8 @@ public partial class SettingsDlg : Window, INotifyPropertyChanged {
       if (double.TryParse (tbNotchWireJointDistance.Text, out double value) && (value.SGT (5) || value.SLT (0))) {
          // Show an error message
          MessageBox.Show ("Notch Wire Joint Distance should lie betweem 0 and 5 mm", "Validation Error", MessageBoxButton.OK, MessageBoxImage.Error);
-
+         if (Settings == null)
+            throw new Exception ($"Settings not found");
          // Optionally, reset the value back to 5
          if (value.GTEQ (5)) {
             tbNotchWireJointDistance.Text = "5";

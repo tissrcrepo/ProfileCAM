@@ -14,13 +14,15 @@ using System.Windows.Input;
 using System.Windows.Threading;
 using ProfileCAM.Core;
 using ProfileCAM.Core.AssemblyUtils;
-using ProfileCAM.Core.Processes;
 using ProfileCAM.Presentation.Draw;
 using ProfileCAM.Input;
 using Flux.API;
 using Microsoft.Win32;
 using SPath = System.IO.Path;
-using ProfileCAM.Core.GCodeGen.LCMMultipass2HLegacy;
+using ProfileCAM.Core.Processes;
+using ProfileCAM.Core.Processes.LCMMultipass2HLegacy;
+using ProfileCAM.Core.Processes.LCMMultipass2HNoDB;
+
 
 namespace ProfileCAM.Presentation;
 /// <summary>Interaction logic for MainWindow.xaml</summary>
@@ -32,7 +34,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged {
    Workpiece? mWork;
    List<Part> mSubParts = [];
    SettingsDlg? mSetDlg;
-   GenesysHub? mGHub;
+   IGenesysHub? mGHub;
    ProcessSimulator? mProcessSimulator;
    ProcessSimulator.ESimulationStatus mSimulationStatus = ProcessSimulator.ESimulationStatus.NotRunning;
    string mSrcDir = "W:/ProfileCAM/Sample";
@@ -310,7 +312,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged {
 
    protected void OnPropertyChanged ([CallerMemberName] string? propertyName = null)
        => PropertyChanged?.Invoke (this, new PropertyChangedEventArgs (propertyName));
-   void UpdateInputFilesList (List<string> files) => Dispatcher.Invoke (() => Files.ItemsSource = files);
+   void UpdateInputFilesList (List<string?>? files) => Dispatcher.Invoke (() => Files.ItemsSource = files);
 
    void PopulateFilesFromDir (string dir) {
       string? inputFileType = Environment.GetEnvironmentVariable ("FC_INPUT_FILE_TYPE");
@@ -329,9 +331,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged {
 
       // Combine the two collections
       var allFiles = igesFiles.Concat (fxFiles).ToList ();
-
-      // Assign the combined collection to ItemsSource
-      UpdateInputFilesList (allFiles);
+      if (allFiles != null) {
+         // Assign the combined collection to ItemsSource
+         UpdateInputFilesList (allFiles);
+      }
    }
    #endregion
 
@@ -446,7 +449,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged {
       var dlg = new FolderPicker {
          InputPath = PathUtils.ConvertToWindowsPath (mSrcDir),
       };
-      if (dlg.ShowDialog () == true) {
+      if (dlg.ShowDialog () == true && dlg.ResultPath != null) {
          mSrcDir = dlg.ResultPath;
          PopulateFilesFromDir (mSrcDir);
       }
@@ -472,7 +475,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged {
 
    void OnJoin (object sender, RoutedEventArgs e) {
       JoinWindow joinWindow = new ();
-
+      if (joinWindow.joinWndVM == null)
+         throw new Exception ("JoinWindow ViewModel is not set");
       // Subscribe to the FileSaved event
       joinWindow.joinWndVM.EvMirrorAndJoinedFileSaved += OnMirrorAndJoinedFileSaved;
       joinWindow.joinWndVM.EvLoadPart += LoadPart;
@@ -490,6 +494,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged {
    }
 
    void OnMenuFileSave (object sender, RoutedEventArgs e) {
+      if (mPart == null)
+         throw new Exception ($"No file {mPart} to save");
+
       SaveFileDialog saveFileDialog = new () {
          Filter = "FX files (*.fx)|*.fx|All files (*.*)|*.*",
          DefaultExt = "fx",
@@ -521,7 +528,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged {
       }
 
       Files.SelectedItem = null;
-      CurrentFile = null;
+      CurrentFile = "";
    }
 
    void OnSettings (object sender, RoutedEventArgs e) {
@@ -539,7 +546,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged {
    }
 
    void OnWindowLoaded (object sender, RoutedEventArgs e) {
-      GenesysHub = new ();
+      if (MCSettings.It.Machine == MachineType.LCMMultipass2H)
+         GenesysHub = new GenesysHub4LCMMultipass2HLegacy ();
+      else if (MCSettings.It.Machine == MachineType.LCMMultipass2HNoDB)
+         GenesysHub = new GenesysHub4GenesysHub4LCMMultipass2HNoDB ();
+      if (mGHub == null)
+         throw new Exception ("Machine is not supported");
       mProcessSimulator = new (mGHub, this.Dispatcher);
       mProcessSimulator.TriggerRedraw += TriggerRedraw;
       mProcessSimulator.SetSimulationStatus += status => SimulationStatus = status;
@@ -551,6 +563,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged {
    }
 
    void OnSanityCheck (object sender, RoutedEventArgs e) {
+      if (mGHub == null) throw new Exception ($"Genesys hub for process not set");
       mGHub.ResetGCodeGenForTesting ();
       SanityTestsDlg sanityTestsDlg = new (mGHub);
       sanityTestsDlg.ShowDialog ();
@@ -566,7 +579,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged {
          // Settings JSON
          string settingsFilePath = Path.Combine (fChassisFolderPath, "ProfileCAM.User.Settings.JSON");
 
-         string envVariable = Environment.GetEnvironmentVariable ("__FC_AUTH__");
+         string? envVariable = Environment.GetEnvironmentVariable ("__FC_AUTH__");
          Guid expectedGuid = new ("e96e66ff-17e6-49ac-9fe1-28bb45a6c1b9");
 #if DEBUG || TESTRELEASE
          MCSettings.It.SaveSettingsToJsonASCII (settingsFilePath);
@@ -595,29 +608,30 @@ public partial class MainWindow : Window, INotifyPropertyChanged {
          Directory.CreateDirectory (fChassisFolderPath);
          string recentFilesJSONPath = System.IO.Path.Combine (fChassisFolderPath, "ProfileCAM.User.RecentFiles.JSON");
          string timeStamp = DateTime.Now.ToString ("yyyy-MM-dd HH:mm:ss");
-         if (!string.IsNullOrEmpty (file)) {
-            mRecentFilesMap[PathUtils.ConvertToWindowsPath (file, isFile: true)] = timeStamp;
-         } else if (mPart != null && mPart.Info != null && !string.IsNullOrEmpty (mPart.Info.FileName))
-            mRecentFilesMap[PathUtils.ConvertToWindowsPath (mPart.Info.FileName, isFile: true)] = timeStamp;
+         if (mRecentFilesMap != null) {
+            if (!string.IsNullOrEmpty (file)) {
+               mRecentFilesMap[PathUtils.ConvertToWindowsPath (file, isFile: true)] = timeStamp;
+            } else if (mPart != null && mPart.Info != null && !string.IsNullOrEmpty (mPart.Info.FileName))
+               mRecentFilesMap[PathUtils.ConvertToWindowsPath (mPart.Info.FileName, isFile: true)] = timeStamp;
+         }
 
          // The old recent files ProfileCAM.User.RecentFiles.JSON
          // should be concatanated with new one mRecentFilesMap.
          // If no file was ever opened, the old recent files will be overwritten 
          // with nothing. This has to be avoided
-
          if (mRecentFilesMap != null) {
             var oldRecentFiles = LoadRecentFilesFromJSON (recentFilesJSONPath);
-            mRecentFilesMap = mRecentFilesMap
-             .Concat (oldRecentFiles)
-             .GroupBy (kvp => kvp.Key)
-             .ToDictionary (
-                 g => g.Key,
-                 g => g.Max (kvp => kvp.Value)  // Keeps the LATEST timestamp
-             );
+            if (oldRecentFiles != null) {
+               mRecentFilesMap = mRecentFilesMap
+                   .Concat (oldRecentFiles)
+                   .GroupBy (kvp => kvp.Key)
+                   .ToDictionary (
+                       g => g.Key,
+                       g => g.Max (kvp => kvp.Value)!   // ← Add ! here (null-forgiving operator)
+                   );
+            }
 
             TrimRecentFilesMap (mRecentFilesMap);
-
-            // Recent files JSON (MCSettings manages mRecentFilesMap internally)
             SaveRecentFilesToJSON (mRecentFilesMap, recentFilesJSONPath);
          }
       } catch (Exception) {
@@ -671,7 +685,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged {
       }
    }
 
-   public GenesysHub? GenesysHub {
+   public IGenesysHub? GenesysHub {
       get => mGHub;
       set {
          if (mGHub != value)  // Check if value is different
@@ -856,7 +870,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged {
             _cutMarks = false;
          }
          mOverlay?.Redraw ();
-         GCodeGenerator.EvaluateToolConfigXForms (Work);
+         Utils.EvaluateToolConfigXForms (Work);
       }
    }
 
@@ -909,7 +923,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged {
          try {
             if (GenesysHub == null)
                throw new Exception ("Genesyshub is null");
-            GenesysHub.ComputeGCode ();
+            GenesysHub.ComputeGCode (testing:false);
          } catch (Exception) {
             // 2. Restore cursor ONCE at the end — guaranteed
             this.Dispatcher.Invoke (() => {

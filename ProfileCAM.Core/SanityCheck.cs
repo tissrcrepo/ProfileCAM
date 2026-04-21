@@ -1,7 +1,7 @@
 using System.Diagnostics;
-using ProfileCAM.Core.Processes;
 using Flux.API;
-using ProfileCAM.Core.GCodeGen.LCMMultipass2HLegacy;
+using ProfileCAM.Core.GCodeGen;
+using ProfileCAM.Core.Processes;
 
 namespace ProfileCAM.Core {
    /// <summary>Implements a very basic sanity check</summary>
@@ -11,15 +11,15 @@ namespace ProfileCAM.Core {
    public class SanityCheck {
       #region Constructor(s)
       // Constructor
-      public SanityCheck (GenesysHub genHub) {
+      public SanityCheck (IGenesysHub genHub) {
          GenesysHub = genHub ?? throw new ArgumentNullException (nameof (genHub));
          GCodeGen = GenesysHub.GCodeGen;
       }
       #endregion
       #region Contained Entities
-      public GenesysHub GenesysHub { get; private set; }
+      public IGenesysHub GenesysHub { get; private set; }
       public Part Part { get; private set; }
-      public GCodeGenerator GCodeGen { get; private set; }
+      public IGCodeGenerator GCodeGen { get; private set; }
       #endregion
 
       #region Properties

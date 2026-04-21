@@ -1,5 +1,6 @@
 ﻿using Flux.API;
 using ProfileCAM.Core.Geometries;
+using ProfileCAM.Core.GCodeGen;
 using System.Collections.Generic;
 using static Flux.Sheaf;
 using System.Windows.Input;
@@ -11,7 +12,7 @@ namespace ProfileCAM.Core.Optimizer;
 public class PartMultiFrames {
    public Workpiece? Work { get; }
    public double MaxFrameLength { get; }
-   public GCodeGenerator GCodeGen { get; private set; }
+   public IGCodeGenerator GCodeGen { get; private set; }
    public double MinFrameLength { get; }
    public LinkedList<ToolScope<Tooling>> AllToolScopes { get; } = [];
    public List<ToolScope<Tooling>> ToolScopesList { get; } = [];
@@ -33,7 +34,7 @@ public class PartMultiFrames {
    }
    public int Count { get { return AllToolScopes.Count; } }
    public List<Frame?>? OptimalFrames { get; set; } = [];
-   public PartMultiFrames (GCodeGenerator gcGen, double minFL, double tol = 1e-6) {
+   public PartMultiFrames (IGCodeGenerator gcGen, double minFL, double tol = 1e-6) {
       ArgumentNullException.ThrowIfNull (gcGen);
       Tol = tol;
       GCodeGen = gcGen;

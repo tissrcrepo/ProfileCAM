@@ -547,7 +547,7 @@ else
       /// <param name="splitNonNotches">Boolean switch if non-notches have to be split</param>
       /// <returns>Returns the tuple of List of tool scopes and a bool flag if the initial list has been modified by split</returns>
       public static Tuple<List<ToolingScope>, bool> SplitToolingScopesAtIxn (List<ToolingScope> tss, MultiPassCuts mpc, double ixnX,
-         Bound3 bound, GCodeGenerator gcGen, double thresholdLength = -1, bool splitNotches = true, bool splitNonNotches = false) {
+         Bound3 bound, IGCodeGenerator gcGen, double thresholdLength = -1, bool splitNotches = true, bool splitNonNotches = false) {
          var res = tss;
          bool listModified = false;
          for (int ii = 0; ii < res.Count; ii++) {
@@ -815,7 +815,7 @@ else if (ts.StartX >= deadZoneXmax && ts.EndX <= EndX)                TSInScope2
 
       #region Properties
       public List<ToolingScope> ToolingScopes { get => mTscs; set { mTscs = value; } }
-      public GCodeGenerator mGC;
+      public IGCodeGenerator mGC;
       public List<List<GCodeSeg>[]> CutScopeTraces { get; set; }
       public double MaximumWorkpieceLength { get; set; }
       public double MaximumScopeLength { get; set; }
@@ -847,7 +847,7 @@ else if (ts.StartX >= deadZoneXmax && ts.EndX <= EndX)                TSInScope2
       #endregion
 
       #region Constructor(s)
-      public MultiPassCuts (GCodeGenerator gcodeGen, double minThresholdNotchLength = 15.0) {
+      public MultiPassCuts (IGCodeGenerator gcodeGen, double minThresholdNotchLength = 15.0) {
          mGC = gcodeGen;
          InitializeModelData (gcodeGen);
          InitializeMachineParameters (gcodeGen);
@@ -862,7 +862,7 @@ else if (ts.StartX >= deadZoneXmax && ts.EndX <= EndX)                TSInScope2
       }
 
       // Initialization methods -----------------------------------------------------------------------
-      void InitializeModelData (GCodeGenerator gcodeGen) {
+      void InitializeModelData (IGCodeGenerator gcodeGen) {
          Model = gcodeGen.Process.Workpiece.Model;
          XMax = Model.Bound.XMax;
          XMin = Model.Bound.XMin;
@@ -872,7 +872,7 @@ else if (ts.StartX >= deadZoneXmax && ts.EndX <= EndX)                TSInScope2
          MaximumWorkpieceLength = XMax - XMin;
       }
 
-      void InitializeMachineParameters (GCodeGenerator gcodeGen) {
+      void InitializeMachineParameters (IGCodeGenerator gcodeGen) {
          DeadBandWidth = gcodeGen.DeadbandWidth;
          MaximumScopeLength = gcodeGen.MaxFrameLength;
          MaximizeFrameLengthInMultipass = gcodeGen.MaximizeFrameLengthInMultipass;
@@ -882,7 +882,7 @@ else if (ts.StartX >= deadZoneXmax && ts.EndX <= EndX)                TSInScope2
          MovementTime = 60 / (MCSettings.It.MovementSpeed * 1000);
       }
 
-      void InitializeToolingScopes (GCodeGenerator gcodeGen) {
+      void InitializeToolingScopes (IGCodeGenerator gcodeGen) {
          List<Tooling> toolings = gcodeGen.Process.Workpiece.Cuts;
          ToolingScopes = ToolingScope.CreateToolingScopes (toolings, mIsLeftToRight);
          CheckInfusableCutOuts ();
@@ -1828,8 +1828,8 @@ else                throw new Exception ($"Tooling scope not found in mpc.toolsc
          if (!mGC.OptimizePartition) mGC.PartitionRatio = 0.5;
          if (mGC.Heads == MCSettings.EHeads.Left || mGC.Heads == MCSettings.EHeads.Right) mGC.PartitionRatio = 1.0;
          mGC.BlockNumber = 0;
-         mGC.GenerateGCode (GCodeGenerator.ToolHeadType.Master, mcCutScopes);
-         mGC.GenerateGCode (GCodeGenerator.ToolHeadType.Slave, mcCutScopes);
+         mGC.GenerateGCode (IGCodeGenerator.ToolHeadType.Master, mcCutScopes);
+         mGC.GenerateGCode (IGCodeGenerator.ToolHeadType.Slave, mcCutScopes);
 
          mGC.BlockNumber = 0;
          CutScopeTraces = mGC.CutScopeTraces;

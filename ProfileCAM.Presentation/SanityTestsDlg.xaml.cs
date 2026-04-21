@@ -10,13 +10,13 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
 
-using ProfileCAM.Core;
 using ProfileCAM.Core.Processes;
+using ProfileCAM.Core;
 
 namespace ProfileCAM.Presentation;
 public partial class SanityTestsDlg : Window, INotifyPropertyChanged {
    #region Constructor
-   public SanityTestsDlg (GenesysHub genHub) {
+   public SanityTestsDlg (IGenesysHub genHub) {
       InitializeComponent ();
       GenesysHub = genHub;
       this.DataContext = this;
@@ -51,7 +51,7 @@ public partial class SanityTestsDlg : Window, INotifyPropertyChanged {
 
    public string? FilePath { get; set; } = mDefaultFxFileDir;
    public string BaselineDir { get; set; } = mDefaultBaselineDir;
-   public GenesysHub GenesysHub { get; set; }
+   public IGenesysHub GenesysHub { get; set; }
    public SanityCheck? SanityCheck { get; set; }
 
    public List<SanityTestData> SanityTests { get; set; } = [];
@@ -355,12 +355,14 @@ public partial class SanityTestsDlg : Window, INotifyPropertyChanged {
       isDirty = false;
    }
 
-   List<bool> RunTests (List<SanityTestData> testDataLst, bool forceRun = false) {
+   List<bool>? RunTests (List<SanityTestData> testDataLst, bool forceRun = false) {
       var stats = SanityCheck?.Run (testDataLst, BaselineDir, SanityCheck?.GetArgumentNullException (), forceRun);
       return stats;
    }
 
-   void UpdateRunStatus (List<int> testIndices, List<bool> stats) {
+   void UpdateRunStatus (List<int> testIndices, List<bool>? stats) {
+      if (stats == null)
+         throw new ArgumentNullException ("Statistics is null");
       for (int ii = 0; ii < stats.Count; ii++) {
          if (stats[ii]) cachedControls[testIndices[ii]].statEllipse.Fill = new SolidColorBrush (Colors.Green);
          else cachedControls[testIndices[ii]].statEllipse.Fill = new SolidColorBrush (Colors.Red);

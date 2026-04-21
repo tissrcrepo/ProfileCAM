@@ -2,6 +2,7 @@
 using ProfileCAM.Core.Optimizer;
 using ProfileCAM.Core;
 using ProfileCAM.Core.Geometries;
+using ProfileCAM.Core.GCodeGen;
 using System.Linq.Expressions;
 using Flux.API;
 using ProfileCAM.Core.GCodeGen.LCMMultipass2HLegacy;
@@ -60,7 +61,7 @@ namespace ProfileCAM.Core.Optimizer {
       // Replace node references with indices
       public int StartIndex { get; set; }
       public int EndIndex { get; set; }
-      GCodeGenerator? mGcGen;
+      IGCodeGenerator? mGcGen;
       double mRapidPosSpeed;
       double mMcSpeed;
       double mStandoffToEngageTime;
@@ -75,7 +76,7 @@ namespace ProfileCAM.Core.Optimizer {
       public Frame () { }
 
       public Frame (
-          GCodeGenerator gcGen,
+          IGCodeGenerator gcGen,
           List<ToolScope<Tooling>> allToolScopes,
           List<ToolScope<Tooling>> frameToolScopes,
           double minFL,
