@@ -5,6 +5,7 @@ using Flux.API;
 using ProfileCAM.Core.Optimizer;
 using ProfileCAM.Core.GCodeGen.LCMMultipass2HLegacy;
 using ProfileCAM.Core.GCodeGen.GCodeFeatures;
+using static ProfileCAM.Core.GCodeGen.IGCodeGenerator;
 
 namespace ProfileCAM.Core;
 public readonly struct PointVec {
@@ -668,7 +669,7 @@ public class Tooling {
          return len;
       }
    }
-
+   
    public static (double minStartX, double maxEndX) GetScope (List<Tooling> toolings) {
       if (toolings == null || toolings.Count == 0)
          return (0.0, 0.0);

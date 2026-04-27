@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace ProfileCAM.Core.Optimizer {
    public struct CandidateFrame {
-      public CandidateFrame (List<ToolScope<Tooling>> toolScopesList, int sIndex, int eIndex, double tol = 1e-6) {
+      public CandidateFrame (ToolScopeList toolScopesList, int sIndex, int eIndex, double tol = 1e-6) {
          if (toolScopesList == null)
             throw new ArgumentException ("CandidateFrame requires non-null toolScopesList");
 
@@ -27,7 +27,7 @@ namespace ProfileCAM.Core.Optimizer {
       public int EndIndex { get; set; } = -1;
       public double StartX { get; set; }
       public double EndX { get; set; }
-      public List<ToolScope<Tooling>> ToolScopesList { get; set; } = [];
+      public ToolScopeList ToolScopesList { get; set; } = [];
 
       public double ScopeLength => EndX - StartX;
    }

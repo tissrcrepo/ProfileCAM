@@ -413,4 +413,57 @@ public class FCArc3 : FCCurve3 {
       var p = EvaluatePointAtParam (newT);
       return p;
    }
+
+   // Caveat:This Bounds work only for arcs/circles on XY and XZ planes
+   // with plane normal of the arc is parallel to the YZ plane
+   public override Bound3 Bounds {
+      get {
+         Point3 left, right, upDown1, upDown2;
+         Vector3 biNormal;
+         Bound3 bound;
+         left = Center + XForm4.mNegXAxis * Radius;
+         right = Center + XForm4.mXAxis * Radius;
+         biNormal = PlaneNormal.Cross (left - Center).Normalized ();
+         upDown1 = (biNormal * Radius).ToPoint ();
+         upDown2 = (biNormal * -Radius).ToPoint ();
+         if (IsCircle)
+            bound = Utils.GetPointsBounds ([left, right, upDown1, upDown2]);
+         else {
+            List<Point3> pts = [Start, End];
+            if (IsPointOnCurve (left)) pts.Add (left);
+            if (IsPointOnCurve (right)) pts.Add (right);
+            if (IsPointOnCurve (upDown1)) pts.Add (upDown1);
+            if (IsPointOnCurve (upDown2)) pts.Add (upDown2);
+            bound = Utils.GetPointsBounds (pts);
+         }
+         return bound;
+      }
+   }
+
+   private void GetBasisVectors (Vector3 n, out Vector3 u, out Vector3 v) {
+      // Try positive X-axis first
+      Vector3 xAxis = new Vector3 (1, 0, 0);
+      Vector3 xProjected = xAxis - n * xAxis.Dot (n);
+
+      if (xProjected.LengthSquared ().SGT(Tol * Tol))
+         u = xProjected.Normalized ();
+      else {
+         // Positive X fails, try negative X
+         Vector3 negXAxis = new Vector3 (-1, 0, 0);
+         Vector3 negXProjected = negXAxis - n * negXAxis.Dot (n);
+
+         if (negXProjected.LengthSquared ().SGT(Tol * Tol)) {
+            u = negXProjected.Normalized ();
+         } else {
+            // Both X axes fail (plane is perpendicular to X-axis)
+            // Fall back to Y-axis
+            Vector3 yAxis = new Vector3 (0, 1, 0);
+            Vector3 yProjected = yAxis - n * yAxis.Dot (n);
+            u = yProjected.Normalized ();
+         }
+      }
+
+      // v completes the orthonormal basis
+      v = n.Cross (u).Normalized ();
+   }
 }

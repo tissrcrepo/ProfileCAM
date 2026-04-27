@@ -6,6 +6,9 @@ using ProfileCAM.Core.GCodeGen;
 using System.Linq.Expressions;
 using Flux.API;
 using ProfileCAM.Core.GCodeGen.LCMMultipass2HLegacy;
+using static ProfileCAM.Core.GCodeGen.IGCodeGenerator;
+using System.Windows.Navigation;
+using System.Security.Cryptography;
 
 namespace ProfileCAM.Core.Optimizer {
    public struct Frame {
@@ -15,20 +18,22 @@ namespace ProfileCAM.Core.Optimizer {
          H21,
          H22
       }
-      public enum HeadType {
-         Master,
-         Slave,
-         Infer
-      }
-      public List<ToolScope<Tooling>> FrameToolScopesList { get; set; } = [];
-      public List<ToolScope<Tooling>> AllToolScopesList { get; set; } = [];
-      public List<ToolScope<Tooling>> FrameToolScopesBySX { get; set; } = [];
-      public List<ToolScope<Tooling>> FrameToolScopesByEX { get; set; } = [];
+      //public enum HeadType {
+      //   Master,
+      //   Slave,
+      //   Infer
+      //}
 
-      public List<ToolScope<Tooling>> FrameToolScopesH11 { get; set; } = [];
-      public List<ToolScope<Tooling>> FrameToolScopesH12 { get; set; } = [];
-      public List<ToolScope<Tooling>> FrameToolScopesH21 { get; set; } = [];
-      public List<ToolScope<Tooling>> FrameToolScopesH22 { get; set; } = [];
+      
+      public ToolScopeList FrameToolScopesList { get; set; } = [];
+      public ToolScopeList AllToolScopesList { get; set; } = [];
+      public ToolScopeList FrameToolScopesBySX { get; set; } = [];
+      public ToolScopeList FrameToolScopesByEX { get; set; } = [];
+
+      public ToolScopeList FrameToolScopesH11 { get; set; } = [];
+      public ToolScopeList FrameToolScopesH12 { get; set; } = [];
+      public ToolScopeList FrameToolScopesH21 { get; set; } = [];
+      public ToolScopeList FrameToolScopesH22 { get; set; } = [];
       public List<Tooling> ToolingsH11 = [];
       public List<Tooling> ToolingsH12 = [];
       public List<Tooling> ToolingsH21 = [];
@@ -68,17 +73,17 @@ namespace ProfileCAM.Core.Optimizer {
       double mStandOffDist;
       PointVec? mPrevFrameFinishPosH1;
       PointVec? mPrevFrameFinishPosH2;
-
+      Bound3 mPartBound;
       public double Tol { get; set; } = 1e-6;
       double A, B, C;
-      public bool IsLastPass {  get; private set; }
-      public bool IsHead1Job { get; private set; } = false;
+      public bool IsLastPass { get; private set; }
+      public bool IsSingleHeadJob { get; private set; } = false;
       public Frame () { }
 
       public Frame (
           IGCodeGenerator gcGen,
-          List<ToolScope<Tooling>> allToolScopes,
-          List<ToolScope<Tooling>> frameToolScopes,
+          ToolScopeList allToolScopes,
+          ToolScopeList frameToolScopes,
           double minFL,
           double maxFL,
           int startIndex, // in allToolScopes
@@ -89,6 +94,7 @@ namespace ProfileCAM.Core.Optimizer {
           double mcSpeed,
           double sOff2EngageTime,
           double sOffDist,
+          Bound3 partBound,
           bool isPossibleLastFrame,
           double tol = 1e-6) {
          // Find if the frame is the last one
@@ -106,7 +112,7 @@ namespace ProfileCAM.Core.Optimizer {
          mPrevFrameFinishPosH2 = prevFrameFinishPosH2;
          AllToolScopesList = allToolScopes ?? throw new FrameNotProcessableException ("Empty frame");
          FrameToolScopesList = frameToolScopes ?? throw new FrameNotProcessableException ("Empty frame");
-         
+
          StartIndex = startIndex;
          EndIndex = endIndex;
 
@@ -134,12 +140,14 @@ namespace ProfileCAM.Core.Optimizer {
          EndX = FrameToolScopesByEX[^1].EndX;
 
          var delta = (EndX - StartX) / 2 - MinFL;
-         
+         mPartBound = partBound;
+         var partLastSectionEndX = partBound.XMax;
+         var partLastSectionStartX = partBound.XMax-MaxFL;
          // Heuristic for the last pass. Here the Sx - A - B - C - Ex 
          // will not be having a complete length. If the Ex-Sx <= MinFL + 100
          // then it is marked as single head
          if ((EndX - StartX).LTEQ (minFL + 100) && isPossibleLastFrame)
-            IsHead1Job = true;
+            IsSingleHeadJob = true;
 
          A = Head11EndX = StartX + delta;
          B = Head12EndX = Head11EndX + MinFL;
@@ -150,19 +158,16 @@ namespace ProfileCAM.Core.Optimizer {
          FrameToolScopesH21 = [];
          FrameToolScopesH22 = [];
 
-
-
          OffsetABCD ();
          CollectToolScopesInBuckets ();
+         // Allocate Heads to tooling in toolscopes
+         AllocateHeadsToToolScopes (IGCodeGenerator.ToolHeadType.Infer);
          CheckToolScopesIXNAtXPositions ();
          CheckCountConsistency ();
          CheckMinFLConsistency ();
+         AllocateHeads2Toolings ();
 
-         // Sort tooling as per user settings
-         ToolingsH11 = Utils.GetToolings4Head (FrameToolScopesH11, 0, mGcGen.GCodeGenSettings);
-         ToolingsH12 = Utils.GetToolings4Head (FrameToolScopesH12, 0, mGcGen.GCodeGenSettings);
-         ToolingsH21 = Utils.GetToolings4Head (FrameToolScopesH21, 1, mGcGen.GCodeGenSettings);
-         ToolingsH22 = Utils.GetToolings4Head (FrameToolScopesH22, 1, mGcGen.GCodeGenSettings);
+
          //if (FrameToolScopesH11.Count > 0 && FrameToolScopesH12.Count > 0 && FrameToolScopesH21.Count > 0 && FrameToolScopesH22.Count > 0) {
          //   int aa = 0;
          //   ++aa;
@@ -170,12 +175,15 @@ namespace ProfileCAM.Core.Optimizer {
          FindMachinableStatus ();
          if (MachinableStatus != FrameMachinableStatus.Machinable)
             return;
+         ComputeProcessingTimes (waitTimeSclaFactor: 10.0);
+      }
 
+      void ComputeProcessingTimes (double waitTimeSclaFactor, bool isLastFrame = false) {
          // Machine
-         var (rapisPosTimeH11, mcTimeH11) = ComputeRapidPosAndMachiningTime (Bucket.H11, null);
-         var (rapisPosTimeH12, mcTimeH12) = ComputeRapidPosAndMachiningTime (Bucket.H12, Bucket.H11);
-         var (rapisPosTimeH21, mcTimeH21) = ComputeRapidPosAndMachiningTime (Bucket.H21, null);
-         var (rapisPosTimeH22, mcTimeH22) = ComputeRapidPosAndMachiningTime (Bucket.H22, Bucket.H21);
+         var (rapisPosTimeH11, mcTimeH11) = ComputeRapidPosAndMachiningTime (Bucket.H11, previousBucket: null);
+         var (rapisPosTimeH12, mcTimeH12) = ComputeRapidPosAndMachiningTime (Bucket.H12, previousBucket: Bucket.H11);
+         var (rapisPosTimeH21, mcTimeH21) = ComputeRapidPosAndMachiningTime (Bucket.H21, previousBucket: null);
+         var (rapisPosTimeH22, mcTimeH22) = ComputeRapidPosAndMachiningTime (Bucket.H22, previousBucket: Bucket.H21);
 
          // Calculate times
          RapidPosTimeH1 = rapisPosTimeH11 + rapisPosTimeH12;
@@ -185,12 +193,14 @@ namespace ProfileCAM.Core.Optimizer {
          MachiningTimeH2 = mcTimeH21 + mcTimeH22;
 
          TotalRapidPosTime = RapidPosTimeH2 + RapidPosTimeH1;
-         WaitTime = Math.Abs (MachiningTimeH1 - MachiningTimeH2) * 10.0; // Scale factor for waiting time
-         TotalMachiningTime = MachiningTimeH1 + MachiningTimeH2 ;
-         TotalProcessTime = TotalMachiningTime + WaitTime + TotalRapidPosTime;
+         WaitTime = MachiningTimeH1 - MachiningTimeH2;
+         if (isLastFrame) waitTimeSclaFactor = 1;
+         var ScaledWaitTime = Math.Abs (MachiningTimeH1 - MachiningTimeH2) * waitTimeSclaFactor; // Scale factor for waiting time
+         TotalMachiningTime = MachiningTimeH1 + MachiningTimeH2;
+         TotalProcessTime = TotalMachiningTime + ScaledWaitTime + TotalRapidPosTime;
       }
-      readonly List<ToolScope<Tooling>> GetToolScopes (Bucket bucket) {
-         List<ToolScope<Tooling>> toolScopes = bucket switch {
+      readonly ToolScopeList GetToolScopes (Bucket bucket) {
+         ToolScopeList toolScopes = bucket switch {
             Bucket.H11 => FrameToolScopesH11,
             Bucket.H12 => FrameToolScopesH12,
             Bucket.H21 => FrameToolScopesH21,
@@ -207,7 +217,7 @@ namespace ProfileCAM.Core.Optimizer {
          if (previousBucket == null && mPrevFrameFinishPosH1 == null)
             throw new ArgumentException ("Either previous bucket of the frame OR previous frame's eEnd Position should exist");
 
-         List<ToolScope<Tooling>> toolScopes = GetToolScopes (bucket);
+         ToolScopeList toolScopes = GetToolScopes (bucket);
          if (toolScopes.Count == 0)
             return (0, 0);
 
@@ -217,7 +227,7 @@ namespace ProfileCAM.Core.Optimizer {
          else if (previousBucket != null) {
             var prevBucketToolScopes = GetToolScopes (previousBucket.Value);
             var lastBuckerPos = Utils.GetEndPos (prevBucketToolScopes);
-            if ( lastBuckerPos != null )
+            if (lastBuckerPos != null)
                rapidPosDist += Utils.GetRapidPosDist (lastBuckerPos, Utils.GetStartPos (toolScopes));
          }
 
@@ -243,46 +253,85 @@ namespace ProfileCAM.Core.Optimizer {
 
          return (rapidPosTime, mcTime);
       }
-      
+
+      void AllocateHeads2Toolings () {
+         // Sort tooling as per user settings
+         if (mGcGen == null)
+            throw new Exception ("G Code generator not set");
+         FrameToolScopesH11 = Utils.GetToolingScopes4Head (FrameToolScopesH11, 0, mGcGen.GCodeGenSettings);
+         FrameToolScopesH12 = Utils.GetToolingScopes4Head (FrameToolScopesH12, 0, mGcGen.GCodeGenSettings);
+         FrameToolScopesH21 = Utils.GetToolingScopes4Head (FrameToolScopesH21, 1, mGcGen.GCodeGenSettings);
+         FrameToolScopesH22 = Utils.GetToolingScopes4Head (FrameToolScopesH22, 1, mGcGen.GCodeGenSettings);
+
+         ToolingsH11 = [.. FrameToolScopesH11.Select (ts => ts.Tooling)];
+         ToolingsH12 = [.. FrameToolScopesH12.Select (ts => ts.Tooling)];
+         ToolingsH21 = [.. FrameToolScopesH21.Select (ts => ts.Tooling)];
+         ToolingsH22 = [.. FrameToolScopesH22.Select (ts => ts.Tooling)];
+      }
+
+      public ToolScopeList Bucket11ToolScopes { get => FrameToolScopesH11; }
+      public ToolScopeList Bucket12ToolScopes { get => FrameToolScopesH12; }
+      public ToolScopeList Bucket21ToolScopes { get => FrameToolScopesH21; }
+      public ToolScopeList Bucket22ToolScopes { get => FrameToolScopesH22; }
+
+      public List<Tooling> Bucket11Toolings { get => ToolingsH11; }
+      public List<Tooling> Bucket12Toolings { get => ToolingsH12; }
+      public List<Tooling> Bucket21Toolings { get => ToolingsH21; }
+      public List<Tooling> Bucket22Toolings { get => ToolingsH22; }
+      public ToolScopeList MasterHeadToolingScopes {
+         get {
+            ToolScopeList res = [.. Bucket11ToolScopes, .. Bucket12ToolScopes]; ;
+            return res;
+         }
+      }
+      public ToolScopeList SlaveHeadToolScopes {
+         get {
+            ToolScopeList res = [.. Bucket21ToolScopes, .. Bucket22ToolScopes]; ;
+            return res;
+         }
+      }
+
+
+
       readonly void CheckCountConsistency () {
-         if (IsHead1Job) return;
+         if (IsSingleHeadJob) return;
          if (FrameToolScopesH11.Count + FrameToolScopesH12.Count + FrameToolScopesH21.Count + FrameToolScopesH22.Count != FrameToolScopesList.Count)
             throw new Exception ("Total tool scopes in the buckets NOT EQUAL to Count in FrameToolScopesList");
       }
       readonly void CheckMinFLConsistency () {
-         if (  IsHead1Job) return;
+         if (IsSingleHeadJob) return;
          if ((C - B).SLT (MinFL))
             throw new Exception ($"The bucket for H2 => H21 {C - B} size lesser than {MinFL} mm");
          if ((B - A).SLT (MinFL))
             throw new Exception ($"The bucket for H2 => H21 {B - A} size lesser than {MinFL} mm");
       }
       public readonly void CheckToolScopesIXNAtXPositions (double tol = 1e-6) {
-         if (IsHead1Job)
+         if (IsSingleHeadJob)
             return;
          // there is no need to find the intersections at A and C. The intersecting tools scopes 
          // at A, are added to FrameToolScopesH12 since the left head can move in -X direction
          // at C, are added to FrameToolScopesH21 since the right head can always move in +X direction
-         
+
          var atB = PartMultiFrames.GetToolScopesIxnAt (FrameToolScopesList, B, excludeProcessed: true, startIndex: 0, tol: tol);
          if (atB.Count > 0) throw new Exception ("ToolScopes intersect at B");
       }
 
-      readonly void AllocateHeadsToToolScopes (HeadType hType) {
+      public readonly void AllocateHeadsToToolScopes (IGCodeGenerator.ToolHeadType hType) {
          int headForLeft = 0;   // H11 & H12
          int headForRight = 1;   // H21 & H22
 
          switch (hType) {
-            case HeadType.Master:
+            case IGCodeGenerator.ToolHeadType.Master:
                headForLeft = 0;
                headForRight = 0;
                break;
 
-            case HeadType.Slave:
+            case IGCodeGenerator.ToolHeadType.Slave:
                headForLeft = 1;
                headForRight = 1;
                break;
 
-            case HeadType.Infer:
+            case IGCodeGenerator.ToolHeadType.Infer:
                headForLeft = 0;
                headForRight = 1;
                break;
@@ -299,7 +348,7 @@ namespace ProfileCAM.Core.Optimizer {
       }
 
       // Helper method to avoid code duplication
-      private readonly void SetHeadForList (List<ToolScope<Tooling>>? list, int headValue) {
+      private readonly void SetHeadForList (ToolScopeList? list, int headValue) {
          if (list == null)
             return;
 
@@ -311,7 +360,7 @@ namespace ProfileCAM.Core.Optimizer {
       }
 
       void OffsetABCD () {
-         if (IsHead1Job)
+         if (IsSingleHeadJob)
             return;
          // No intersection of toolscopes at "B" or the center is desired. Dilemma arised
          // as to which of the buckets the ixn tss be part of., FrameToolScopesH12 or FrameToolScopesH21
@@ -325,7 +374,7 @@ namespace ProfileCAM.Core.Optimizer {
          bool leftOffsetStrategy = true, rightOffsetStrategy = true;
          bool needToLeftOffset = false, needToRightOffset = false;
          while (true) {
-            var ixnTSSAtFrameCenter = PartMultiFrames.GetToolScopesIxnAt (FrameToolScopesList, b1, excludeProcessed: true, 
+            var ixnTSSAtFrameCenter = PartMultiFrames.GetToolScopesIxnAt (FrameToolScopesList, b1, excludeProcessed: true,
                startIndex: 0, tol: Tol);
 
             if (ixnTSSAtFrameCenter.Count > 0) {
@@ -343,7 +392,7 @@ namespace ProfileCAM.Core.Optimizer {
          }
 
          while (true) {
-            var ixnTSSAtFrameCenter = PartMultiFrames.GetToolScopesIxnAt (FrameToolScopesList, b2, excludeProcessed: true, 
+            var ixnTSSAtFrameCenter = PartMultiFrames.GetToolScopesIxnAt (FrameToolScopesList, b2, excludeProcessed: true,
                startIndex: 0, tol: Tol);
 
             if (ixnTSSAtFrameCenter.Count > 0) {
@@ -397,14 +446,24 @@ namespace ProfileCAM.Core.Optimizer {
          if (PartMultiFrames.GetToolScopesIxnAt (FrameToolScopesList, B, excludeProcessed: true, startIndex: 0, tol: Tol).Count > 0)
             throw new Exception ("Tool Scopes intersect at B line");
       }
-      void CollectToolScopesInBuckets (double tol = 1e-6) {
 
-         if (IsHead1Job) {
+      public void AllocateHeadsToToolScopes () {
+         if (IsSingleHeadJob) {
+            var partLastSectionMidX = (mPartBound.XMin + mPartBound.XMin) / 2.0;
             FrameToolScopesH11 = PartMultiFrames.GetToolScopesWithin (
              FrameToolScopesList, StartX, EndX, excludeProcessed: true);
-            AllocateHeadsToToolScopes (HeadType.Master);
+            double avgCenter = FrameToolScopesH11.Average (ts => (ts.StartX + ts.EndX) / 2.0);
+            if (avgCenter.LTEQ (partLastSectionMidX))
+               AllocateHeadsToToolScopes (IGCodeGenerator.ToolHeadType.Master);
+            else
+               AllocateHeadsToToolScopes (IGCodeGenerator.ToolHeadType.Slave);
             return;
          }
+         AllocateHeadsToToolScopes (ToolHeadType.Infer);
+      }
+      void CollectToolScopesInBuckets (double tol = 1e-6) {
+
+         
 
          double A = Head11EndX;
          double B = Head12EndX;
@@ -455,10 +514,10 @@ namespace ProfileCAM.Core.Optimizer {
 
 
          // Find the intersecting tool scopes at EndX
-         var ixnTSSAtFrameEnd = PartMultiFrames.GetToolScopesIxnAt (FrameToolScopesList, EndX, 
+         var ixnTSSAtFrameEnd = PartMultiFrames.GetToolScopesIxnAt (FrameToolScopesList, EndX,
             excludeProcessed: true, startIndex: 0, tol: tol);
 
-         //List<ToolScope<Tooling>> ixnToAdd = [];
+         //ToolScopeList ixnToAdd = [];
 
          // Check the length between Frame StartX and the itersecting toolscopes Endx 
          // is <= MaxFL. If so the intersecting tool scopes. Otherwise, it is not feasible 
@@ -469,8 +528,7 @@ namespace ProfileCAM.Core.Optimizer {
          }
 
 
-         // Allocate Heads to tooling in toolscopes
-         AllocateHeadsToToolScopes (HeadType.Infer);
+         
       }
 
       public void FindMachinableStatus () {
@@ -478,7 +536,7 @@ namespace ProfileCAM.Core.Optimizer {
             MachinableStatus = FrameMachinableStatus.Empty;
             return;
          }
-         if (IsHead1Job) {
+         if (IsSingleHeadJob) {
             MachinableStatus = FrameMachinableStatus.Machinable;
             return;
          }
@@ -505,16 +563,109 @@ namespace ProfileCAM.Core.Optimizer {
          MachinableStatus = FrameMachinableStatus.Machinable;
       }
 
-      public static List<ToolScope<Tooling>> GetUnprocessedToolScopes (List<ToolScope<Tooling>> tss) {
+      public static ToolScopeList GetUnprocessedToolScopes (ToolScopeList tss) {
          if (tss == null)
             return [];
 
          return [.. tss.Where (ts => ts != null && !ts.IsProcessed)];
       }
 
+      public bool IsEmpty {
+         get {
+            if (Bucket11ToolScopes.Count == 0 && Bucket12ToolScopes.Count == 0 &&
+               Bucket21ToolScopes.Count == 0 && Bucket22ToolScopes.Count == 0)
+               return true;
+            return false;
+         }
+      }
 
+      public bool IsMasterToolScopesEmpty {
+         get {
+            if (Bucket11ToolScopes.Count == 0 && Bucket12ToolScopes.Count == 0)
+               return true;
+            return false;
+         }
+      }
+
+      public bool IsSlaveToolScopesEmpty {
+         get {
+            if (Bucket21ToolScopes.Count == 0 && Bucket22ToolScopes.Count == 0)
+               return true;
+            return false;
+         }
+      }
+
+      public readonly ToolScopeList FrameToolScopes(IGCodeGenerator.ToolHeadType headType) {
+         ToolScopeList tss;
+         if (headType == ToolHeadType.Master || headType == ToolHeadType.MasterB2)
+            tss = [.. FrameToolScopesH11, .. FrameToolScopesH12];
+         else
+            tss = [.. FrameToolScopesH21, .. FrameToolScopesH22];
+         return tss;
+      }
+
+      public readonly ToolScopeList FrameToolScopesPerBucket (IGCodeGenerator.ToolHeadType headType) {
+         ToolScopeList tss = [];
+         if (headType == ToolHeadType.Master)
+            tss = FrameToolScopesH11;
+         else if (headType == ToolHeadType.MasterB2)
+            tss = FrameToolScopesH12;
+         else if (headType == ToolHeadType.Slave)
+            tss = FrameToolScopesH21;
+         else if (headType == ToolHeadType.SlaveB2)
+            tss = FrameToolScopesH22;
+         return tss;
+      }
+      public readonly (double XStart, double XPartition, double XEnd) GetXMarkers () {
+         double? b11XStart = null, b11XEnd = null, b12XStart = null, b12XEnd = null;
+         double? b21XStart = null, b21XEnd = null, b22XStart = null, b22XEnd = null;
+         if (ToolingsH11.Count > 0)
+            (b11XStart, b11XEnd) = Utils.GetScopeXExtents (ToolingsH11);
+         if (ToolingsH12.Count > 0)
+            (b12XStart, b12XEnd) = Utils.GetScopeXExtents (ToolingsH12);
+         if ( ToolingsH21.Count > 0)
+            (b21XStart, b21XEnd) = Utils.GetScopeXExtents (ToolingsH21);
+         if (ToolingsH22.Count > 0)
+            (b22XStart, b22XEnd) = Utils.GetScopeXExtents (ToolingsH21);
+
+         double xStart=0, xPartition=0, xEnd = 0;
+         
+         // Get XStart
+         if (ToolingsH11.Count > 0 && b11XStart != null )
+            xStart = b11XStart.Value;
+         else if ( ToolingsH12.Count > 0 && b12XStart != null )
+            xStart = b12XStart.Value;
+         else if (ToolingsH21.Count > 0 && b21XStart != null)
+            xStart = b21XStart.Value;
+         else if (ToolingsH22.Count > 0 && b22XStart != null)
+            xStart = b22XStart.Value;
+
+         // Get XPartition
+         if (ToolingsH12.Count > 0 && b12XEnd != null)
+            xPartition = b12XEnd.Value;
+         else if ( ToolingsH21.Count > 0 && b21XStart != null )
+            xPartition = b21XStart.Value;
+         else if ( ToolingsH11.Count > 0 && b11XEnd != null )
+            xPartition = b11XEnd.Value;
+         else if (ToolingsH22.Count > 0 && b22XStart != null)
+            xPartition = b22XStart.Value;
+
+         // Get XEnd
+         if (ToolingsH22.Count > 0 && b22XEnd != null)
+            xEnd = b22XEnd.Value;
+         else if (ToolingsH21.Count > 0 && b21XEnd != null)
+            xEnd = b21XEnd.Value;
+         else if (ToolingsH12.Count > 0 && b12XEnd != null)
+            xEnd = b12XEnd.Value;
+         else if (ToolingsH11.Count > 0 && b11XStart != null)
+            xEnd = b11XStart.Value;
+
+         return (xStart, xPartition, xEnd);
+      }
+      public readonly int TotalToolScopes4Head(IGCodeGenerator.ToolHeadType headType) => FrameToolScopes(headType).Count;
+      public readonly int TotalToolScopes4HeadPerBucket(IGCodeGenerator.ToolHeadType headType) => FrameToolScopesPerBucket(headType).Count;
       // Returns the horizontal extent of all the frames.
-      public static double GetTotalScopesLength (List<Frame> frames) {
+      public static double GetTotalScopesXExtents (List<Frame> frames) {
          double minOfAll = 0;
          double maxOfAll = 0;
          foreach (var frame in frames) {
@@ -532,5 +683,184 @@ namespace ProfileCAM.Core.Optimizer {
          }
          return maxOfAll - minOfAll;
       }
+
+      public static (double minStartX, double maxEndX) GetScopeXExtents (ToolScopeList toolScopes) {
+         if (toolScopes.Count == 0)
+            return (0, 0);
+
+         double minStartX = double.MaxValue;
+         double maxEndX = double.MinValue;
+
+         for (int ii = 0; ii < toolScopes.Count; ii++) {
+            var toolScope = toolScopes[ii];
+            if (toolScope == null) continue;
+
+            var segs = toolScope.Tooling.Segs;
+            for (int jj = 0; jj < toolScope.Tooling.Segs.Count; jj++) {
+               var segment = segs[jj];
+               if (segment.Curve == null)
+                  throw new Exception ($"Curve for {ii} th toolscope and {jj} th tool segment is null");
+
+               double startX = segment.Curve.Start.X;
+               double endX = segment.Curve.End.X;
+
+               if (startX < minStartX)
+                  minStartX = startX;
+
+               if (endX > maxEndX)
+                  maxEndX = endX;
+            }
+         }
+         return (minStartX, maxEndX);
+      }
+
+      public readonly (double minStartX, double maxEndX) GetScopeXExtentsPerBucket (ToolHeadType headType) {
+         double maxEndX;
+         double minStartX;
+         switch (headType) {
+            case ToolHeadType.Master:
+               (minStartX, maxEndX) = GetScopeXExtents (FrameToolScopesH11);
+               break;
+            case ToolHeadType.MasterB2:
+               (minStartX, maxEndX) = GetScopeXExtents (FrameToolScopesH12);
+               break;
+            case ToolHeadType.Slave:
+               (minStartX, maxEndX) = GetScopeXExtents (FrameToolScopesH21);
+               break;
+            case ToolHeadType.SlaveB2:
+               (minStartX, maxEndX) = GetScopeXExtents (FrameToolScopesH22);
+               break;
+            default:
+               throw new Exception ("Unknown headtype encountered");
+         }
+         return (minStartX, maxEndX);
+      }
+
+      public static double GetCumuativeSumOfScopes(Frame? frame, ToolHeadType headType) {
+         if (frame == null)
+            throw new ArgumentNullException (nameof (frame));
+         double cumScope=0;
+         if (headType == ToolHeadType.Master || headType == ToolHeadType.MasterB2) {
+            cumScope += frame.Value.FrameToolScopesH11.Sum (ts => ts.EndX - ts.StartX);
+            cumScope += frame.Value.FrameToolScopesH12.Sum (ts => ts.EndX - ts.StartX);
+         } else {
+            cumScope += frame.Value.FrameToolScopesH21.Sum (ts => ts.EndX - ts.StartX);
+            cumScope += frame.Value.FrameToolScopesH22.Sum (ts => ts.EndX - ts.StartX);
+         }
+         return cumScope;
+      }
+
+      public static double GetCumuativeSumOfScopes (List<Frame?>? frames, ToolHeadType headType) {
+         if (frames == null)
+            throw new ArgumentNullException (nameof (frames));
+
+         double cumScope = 0;
+         for (int i = 0; i < frames.Count; i++) {
+            if (frames[i] == null)
+               throw new ArgumentException ($"Frame at index {i} cannot be null", nameof (frames));
+            cumScope += GetCumuativeSumOfScopes (frames[i], headType);
+         }
+         return cumScope;
+      }
+      public static double GetCumuativeSumOfScopesPerBucket (Frame? frame, ToolHeadType headType) {
+         if (frame == null)
+            throw new ArgumentNullException (nameof (frame));
+         double cumScope = 0;
+         if (headType == ToolHeadType.Master)
+            cumScope += frame.Value.FrameToolScopesH11.Sum (ts => ts.EndX - ts.StartX);
+         else if (headType == ToolHeadType.MasterB2)
+            cumScope += frame.Value.FrameToolScopesH12.Sum (ts => ts.EndX - ts.StartX);
+         else if (headType == ToolHeadType.Slave)
+            cumScope += frame.Value.FrameToolScopesH21.Sum (ts => ts.EndX - ts.StartX);
+         else if (headType == ToolHeadType.SlaveB2)
+            cumScope += frame.Value.FrameToolScopesH22.Sum (ts => ts.EndX - ts.StartX);
+         else
+            throw new Exception ($"Undefined headtype {headType}. No action ");
+
+            return cumScope;
+      }
+
+      public static (double xMinStart, double xMaxEnd) GetScopeXExtents (Frame? frame, ToolHeadType headType) {
+         if ( frame == null )
+         throw new ArgumentNullException(nameof (frame));
+         double xStart, xEnd;
+         if (headType == ToolHeadType.Master || headType == ToolHeadType.MasterB2) {
+            var (xStart1, xEnd1) = Frame.GetScopeXExtents (frame.Value.FrameToolScopesH11);
+            var (xStart2, xEnd2) = Frame.GetScopeXExtents (frame.Value.FrameToolScopesH12);
+            xStart = xStart1 < xStart2 ? xStart1 : xStart2;
+            xEnd = xEnd1 > xEnd2 ? xEnd1 : xEnd2;
+         } else {
+            var (xStart1, xEnd1) = Frame.GetScopeXExtents (frame.Value.FrameToolScopesH21);
+            var (xStart2, xEnd2) = Frame.GetScopeXExtents (frame.Value.FrameToolScopesH22);
+            xStart = xStart1 < xStart2 ? xStart1 : xStart2;
+            xEnd = xEnd1 > xEnd2 ? xEnd1 : xEnd2;
+         }
+         return (xStart, xEnd);
+      }
+
+      public static (double xMinStart, double xMaxEnd) GetScopeXExtentsPerBucket (Frame? frame, ToolHeadType headType) {
+         if (frame == null)
+            throw new ArgumentNullException (nameof (frame));
+
+         double xStart, xEnd;
+
+         switch (headType) {
+            case ToolHeadType.Master:
+               (xStart, xEnd) = Frame.GetScopeXExtents (frame.Value.FrameToolScopesH11);
+               break;
+
+            case ToolHeadType.MasterB2:
+               (xStart, xEnd) = Frame.GetScopeXExtents (frame.Value.FrameToolScopesH12);
+               break;
+
+            case ToolHeadType.Slave:
+               (xStart, xEnd) = Frame.GetScopeXExtents (frame.Value.FrameToolScopesH21);
+               break;
+
+            case ToolHeadType.SlaveB2:
+               (xStart, xEnd) = Frame.GetScopeXExtents (frame.Value.FrameToolScopesH22);
+               break;
+
+            default:
+               throw new ArgumentException ($"Unsupported head type: {headType}", nameof (headType));
+         }
+
+         return (xStart, xEnd);
+      }
+
+      // This finds the bound of the master and masterB2  OR
+      // Slave and SlaveB2.
+      public readonly Bound3 GetBounds (ToolHeadType headType) {
+         Bound3 bound = new ();
+         if (headType == ToolHeadType.Master || headType == ToolHeadType.MasterB2) {
+            foreach (var ts in FrameToolScopesH11) {
+               foreach (var seg in ts.Tooling.Segs) {
+                  var b1 = seg.Curve.Bounds;
+                  bound += b1;
+               }
+            }
+            foreach (var ts in FrameToolScopesH12) {
+               foreach (var seg in ts.Tooling.Segs) {
+                  var b1 = seg.Curve.Bounds;
+                  bound += b1;
+               }
+            }
+         } else {
+            foreach (var ts in FrameToolScopesH21) {
+               foreach (var seg in ts.Tooling.Segs) {
+                  var b1 = seg.Curve.Bounds;
+                  bound += b1;
+               }
+            }
+            foreach (var ts in FrameToolScopesH22) {
+               foreach (var seg in ts.Tooling.Segs) {
+                  var b1 = seg.Curve.Bounds;
+                  bound += b1;
+               }
+            }
+         }
+            return bound;
+      }
    }
+
 }

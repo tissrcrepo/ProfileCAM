@@ -3,31 +3,54 @@ using ProfileCAM.Core.Geometries;
 using ProfileCAM.Core.Processes;
 using static ProfileCAM.Core.MCSettings;
 using static ProfileCAM.Core.Utils;
+using ProfileCAM.Core.Optimizer;
 
 namespace ProfileCAM.Core.GCodeGen;
 #nullable enable
 public interface IGCodeGenerator {
    public enum ToolHeadType {
       Master,
-      Slave
+      Slave,
+      MasterB2,
+      SlaveB2,
+      Infer
    }
-   void InitializeToolingBlock (Tooling toolingItem, Tooling prevToolingItem, /*double frameFeed,*/
-         double xStart, double xPartition, double xEnd, List<ToolingSegment> segs, bool isValidNotch, bool isFlexCut, bool isLast,
-         int startIndex, int endIndex, ToolingSegment? nextTs);
+   void InitializeToolingBlock (Tooling toolingItem, 
+      Tooling prevToolingItem, /*double frameFeed,*/
+         double xStart, 
+         double xPartition, 
+         double xEnd, 
+         List<ToolingSegment> segs,
+         bool isValidNotch, 
+         bool isFlexCut,
+         bool isLast,
+         int startIndex, 
+         int endIndex, 
+         ToolingSegment? nextTs);
 
    void RapidMoveToPiercingPosition (Point3 startPoint, Vector3 direction, EKind kind, bool usePingPongOption, string comment);
 
-   void PrepareforToolApproach (Tooling toolingItem, List<ToolingSegment> toolingSegments,
-       ToolingSegment? prevToolingSegment, Tooling? prevToolingItem,
-       List<ToolingSegment> prevToolingSegs, bool isFirstTooling, bool isValidNotch, Tuple<Point3, Vector3>? notchEntry);
+   void PrepareforToolApproach (Tooling toolingItem, 
+      List<ToolingSegment> toolingSegments,
+       ToolingSegment? prevToolingSegment, 
+       Tooling? prevToolingItem,
+       List<ToolingSegment> prevToolingSegs,
+       bool isFirstTooling, 
+       bool isValidNotch, 
+       Tuple<Point3, Vector3>? notchEntry);
 
    void WriteToolCorrectionData (Tooling toolingItem);
-   void WritePlaneForCircularMotionCommand (bool isFromWebFlange, bool isNotchCut);
+   void WritePlaneForCircularMotionCommand (bool isFromWebFlange,
+      bool isNotchCut);
    void WriteToolDiaCompensation (bool isFlexTooling);
    void EnableMachiningDirective ();
    void DisableMachiningDirective ();
-   ToolingSegment? WriteTooling (List<ToolingSegment> segments, Tooling toolingItem, bool relativeCoords);
-   void FinalizeToolingBlock (Tooling toolingItem, double prevCutToolingsLength, double totalToolingCutLength);
+   ToolingSegment? WriteTooling (List<ToolingSegment> segments, 
+      Tooling toolingItem, 
+      bool relativeCoords);
+   void FinalizeToolingBlock (Tooling toolingItem, 
+      double prevCutToolingsLength, 
+      double totalToolingCutLength);
    public void WriteWireJointTrace (
       ToolingSegment wjtSeg,
       ToolingSegment? nextSeg,
@@ -46,23 +69,41 @@ public interface IGCodeGenerator {
       bool isValidNotch,
       ToolingSegment? flexRefTS,
       out Point3? prevRapidPos,
-      bool toCompleteToolingBlock = false,
-      string comment = "Wire Joint Jump Trace",
-      bool relativeCoords = false,
-      bool firstWJTTrace = true
+      bool toCompleteToolingBlock /*= false*/,
+      string comment /*= "Wire Joint Jump Trace"*/,
+      bool relativeCoords /*= false*/,
+      bool firstWJTTrace /*= true*/
       );
 
-   public void InitializeNotchToolingBlock (Tooling toolingItem, Tooling prevToolingItem,
-         List<ToolingSegment> segs, Vector3 segmentNormal, /*double frameFeed,*/
-         double xStart, double xPartition, double xEnd, bool isFlexCut, bool isLast,
-         bool isValidNotch, int startIndex/*-1*/, int endIndex/*-1*/,
-         int refSegIndex/*0*/, string comment/*""*/, bool isShortPerimeterNotch/*false*/,
+   public void InitializeNotchToolingBlock (Tooling toolingItem, 
+      Tooling prevToolingItem,
+         List<ToolingSegment> segs, 
+         Vector3 segmentNormal, /*double frameFeed,*/
+         double xStart, 
+         double xPartition, 
+         double xEnd, 
+         bool isFlexCut, 
+         bool isLast,
+         bool isValidNotch, 
+         int startIndex/*-1*/, 
+         int endIndex/*-1*/,
+         int refSegIndex/*0*/, 
+         string comment/*""*/, 
+         bool isShortPerimeterNotch/*false*/,
          ToolingSegment? nextTs/* = null*/);
-   public void InitializeNotchToolingBlock (Tooling toolingItem, Tooling prevToolingItem,
-         List<Point3> points, Vector3 segmentNormal, /*double frameFeed,*/double xStart,
-         double xPartition, double xEnd, bool isFlexCut, bool isLast, ToolingSegment? refSeg,
+   public void InitializeNotchToolingBlock (Tooling toolingItem, 
+      Tooling prevToolingItem,
+         List<Point3> points, 
+         Vector3 segmentNormal, /*double frameFeed,*/
+         double xStart,
+         double xPartition, 
+         double xEnd, 
+         bool isFlexCut, 
+         bool isLast, 
+         ToolingSegment? refSeg,
          ToolingSegment? nextTs,
-         bool isValidNotch, string comment /*= ""*/);
+         bool isValidNotch, 
+         string comment /*= ""*/);
 
    public void MoveToNextTooling (
        Vector3 prevToolingEndNormal,
@@ -76,8 +117,12 @@ public interface IGCodeGenerator {
        bool usePingPongOption /*= true*/);
 
    public void WriteLineStatement (string st);
-   public void MoveToMachiningStartPosition (Point3 toolingStartPosition, Vector3 toolingStartNormal, string toolingName);
-   public void WriteCurve (ToolingSegment segment, string toolingName, bool relativeCoords/* = false*/,
+   public void MoveToMachiningStartPosition (Point3 toolingStartPosition, 
+      Vector3 toolingStartNormal, 
+      string toolingName);
+   public void WriteCurve (ToolingSegment segment, 
+      string toolingName, 
+      bool relativeCoords/* = false*/,
          Point3? refStPt/* = null*/);
 
    public void FinalizeNotchToolingBlock (Tooling toolingItem,
@@ -93,8 +138,13 @@ public interface IGCodeGenerator {
        string lineSegmentComment/* = ""*/);
 
    public XForm4 GetXForm ();
-   public void WriteLineSeg (Point3 stPoint, Point3 endPoint, Vector3 startNormal, Vector3 endNormal,
-        string toolingName, bool relativeCoords/* = false*/, Point3? refStPt /*= null*/);
+   public void WriteLineSeg (Point3 stPoint, 
+      Point3 endPoint, 
+      Vector3 startNormal, 
+      Vector3 endNormal,
+        string toolingName, 
+        bool relativeCoords/* = false*/, 
+        Point3? refStPt /*= null*/);
 
    public void WriteLineSeg (
        Point3 stPoint,
@@ -109,11 +159,18 @@ public interface IGCodeGenerator {
        bool relativeCoords /*= false*/,
        Point3? refStPoint /*= null*/);
 
-   public void MoveToRetract (Point3 endPt, Vector3 endNormal, string toolingName);
+   public void MoveToRetract (Point3 endPt, 
+      Vector3 endNormal, 
+      string toolingName);
 
-   public void CreatePartition (List<Tooling> cuts, bool optimize, Bound3 bound);
-   public void AllocateCutScopeTraces (int nCutScopes);
-   public int GenerateGCode (ToolHeadType head, List<MachinableCutScope> mcCutScopes);
+   public void CreatePartition (List<Tooling> cuts, 
+      bool optimize, 
+      Bound3 bound);
+   public void Allocate4Traces (int nCutScopes);
+   public int GenerateGCode (ToolHeadType head, 
+      List<MachinableCutScope> mcCutScopes);
+   public int GenerateGCode (ToolHeadType head,
+      List<Frame?>? frames);
    public int GenerateGCode (ToolHeadType head);
    public void OnNewWorkpiece ();
    public void ClearZombies ();

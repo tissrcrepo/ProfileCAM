@@ -135,15 +135,35 @@ public partial class SettingsDlg : Window, INotifyPropertyChanged {
          IsModified = true;
       });
       cbLCMMachine.ItemsSource = Enum.GetValues (typeof (MachineType)).Cast<MachineType> ();
+      //cbLCMMachine.Bind (() => {
+      //   chbMPC.IsEnabled = tbMaxFrameLength.IsEnabled = tbDeadBandWidth.IsEnabled = (Settings.Machine != MachineType.LCMLegacy);
+      //   return Settings.Machine;
+      //},
+      //   (MachineType selectedType) => {
+      //      chbMPC.IsEnabled = tbMaxFrameLength.IsEnabled = tbDeadBandWidth.IsEnabled = Settings.EnableMultipassCut = (selectedType != MachineType.LCMLegacy);
+      //      Settings.Machine = selectedType;
+      //      IsModified = true;
+      //   });
       cbLCMMachine.Bind (() => {
-         chbMPC.IsEnabled = tbMaxFrameLength.IsEnabled = tbDeadBandWidth.IsEnabled = (Settings.Machine == MachineType.LCMMultipass2H);
+         bool isNotLegacy = (Settings.Machine != MachineType.LCMLegacy);
+         chbMPC.IsEnabled = tbMaxFrameLength.IsEnabled = tbDeadBandWidth.IsEnabled = isNotLegacy;
          return Settings.Machine;
       },
-         (MachineType selectedType) => {
-            chbMPC.IsEnabled = tbMaxFrameLength.IsEnabled = tbDeadBandWidth.IsEnabled = Settings.EnableMultipassCut = (selectedType == MachineType.LCMMultipass2H);
-            Settings.Machine = selectedType;
-            IsModified = true;
-         });
+   (MachineType selectedType) => {
+      bool isNotLegacy = (selectedType != MachineType.LCMLegacy);
+      chbMPC.IsEnabled = tbMaxFrameLength.IsEnabled = tbDeadBandWidth.IsEnabled = isNotLegacy;
+
+      if (selectedType == MachineType.LCMLegacy) {
+         Settings.EnableMultipassCut = false;
+      } else if (Settings.Machine == MachineType.LCMLegacy) {
+         // Just changed from Legacy to another type, enable multipass cut by default
+         Settings.EnableMultipassCut = true;
+      }
+      // If changing between non-Legacy machines, preserve the existing setting
+
+      Settings.Machine = selectedType;
+      IsModified = true;
+   });
       tbWPOptions.Bind (() => {
          return Settings.WorkpieceOptionsFilename;
       }, b => {

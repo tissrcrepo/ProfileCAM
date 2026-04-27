@@ -1625,7 +1625,6 @@ public class Notch : ToolingFeature {
                   pts.Add (nMid2); pts.Add (n2);
                   pts.Add (flangeEnd);
                   pts.Add (notchPointAtApproachpc);
-                  var mTrace = mGCodeGen.Traces[0];
                   bool isFromWebFlange = true;
                   if (Math.Abs (notchApproachEndNormal.Y) > Math.Abs (notchApproachEndNormal.Z))
                      isFromWebFlange = false;

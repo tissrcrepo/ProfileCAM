@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Windows.Media.Media3D;
 using Flux.API;
 
 namespace ProfileCAM.Core.Geometries {
@@ -30,6 +31,12 @@ namespace ProfileCAM.Core.Geometries {
       public override FCCurve3 ReverseClone () {
          FCLine3 arc = new (End, Start);
          return arc as FCCurve3;
+      }
+      public override Bound3 Bounds {
+         get {
+            var bound = Utils.GetPointsBounds ([Start, End]);
+            return bound;
+         }
       }
    }
 }

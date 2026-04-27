@@ -1822,7 +1822,7 @@ else                throw new Exception ($"Tooling scope not found in mpc.toolsc
       /// </summary>
       public void GenerateGCode () {
          // Allocate for CutscopeTraces
-         mGC.AllocateCutScopeTraces (mMachinableCutScopes.Count);
+         mGC.Allocate4Traces (mMachinableCutScopes.Count);
          var mcCutScopes = MachinableCutScope.CreateMachinableCutScopes (mMachinableCutScopes, mGC);
          var prevPartRatio = mGC.PartitionRatio;
          if (!mGC.OptimizePartition) mGC.PartitionRatio = 0.5;

@@ -14,20 +14,21 @@ public class PartMultiFrames {
    public double MaxFrameLength { get; }
    public IGCodeGenerator GCodeGen { get; private set; }
    public double MinFrameLength { get; }
+   public List<List<GCodeSeg>[]> FrameTraces { get; set; } = [];
    public LinkedList<ToolScope<Tooling>> AllToolScopes { get; } = [];
-   public List<ToolScope<Tooling>> ToolScopesList { get; } = [];
+   public ToolScopeList ToolScopesList { get; } = [];
    //public LinkedList<ToolScope<Tooling>> ToolScopesBySx { get; private set; } = [];
-   public List<ToolScope<Tooling>> ToolScopesBySxList { get; private set; } = [];
+   public ToolScopeList ToolScopesBySxList { get; private set; } = [];
    //public LinkedList<ToolScope<Tooling>> ToolScopesByEx { get; private set; } = [];
-   public List<ToolScope<Tooling>> ToolScopesByExList { get; private set; } = [];
+   public ToolScopeList ToolScopesByExList { get; private set; } = [];
    public SortedDictionary<(int ii, int jj), CandidateFrame> CandidateFrames1 { get; private set; } = [];
    public SortedDictionary<int, List<(int jj, CandidateFrame cf)>> CandidateFrames2 = [];
    public List<(int, int)> FrameHeaders { get; private set; } = [];
    public double Tol { get; set; }
-   public List<ToolScope<Tooling>> ToolScopesExListBetween (int st, int end) {
+   public ToolScopeList ToolScopesExListBetween (int st, int end) {
       if (end < st)
          throw new Exception ("Start index should be lessert than end index");
-      List<ToolScope<Tooling>> res = [];
+      ToolScopeList  res = [];
       for (int ii = st; ii <= end; ii++)
          res.Add (ToolScopesByExList[ii]);
       return res;
@@ -75,7 +76,7 @@ public class PartMultiFrames {
       //}
    }
 
-   void PopulateDictionaries (List<ToolScope<Tooling>> tss, bool excludedProcessed = true) {
+   void PopulateDictionaries (ToolScopeList  tss, bool excludedProcessed = true) {
       // Define your file path
       string filePath = @"C:\temp\ProfileCAM\Dictionary.txt";
 
@@ -172,7 +173,7 @@ public class PartMultiFrames {
       }
    }
 
-   void CheckConsistencyOfFrames (List<ToolScope<Tooling>> tss) {
+   void CheckConsistencyOfFrames (ToolScopeList  tss) {
       int processedCount = ToolScopesBySxList.Count (ts => ts.IsProcessed);
       if (tss.Count != processedCount)
          throw new Exception ("No of processed tool scopes in ToolScopesBySxList is not equal to given tool scopes");
@@ -194,7 +195,7 @@ public class PartMultiFrames {
    }
 
    public static (ToolScope<Tooling> ToolScope, int Index)? GetFirstUnprocessedNode (
-    List<ToolScope<Tooling>> toolScopes,
+    ToolScopeList  toolScopes,
     int startIndex = 0) {
       if (toolScopes == null)
          throw new ArgumentNullException (nameof (toolScopes));
@@ -337,13 +338,13 @@ public class PartMultiFrames {
    }
 
 
-   public static List<ToolScope<Tooling>> GetToolScopesIxnAt (
-    List<ToolScope<Tooling>> toolScopes,
+   public static ToolScopeList  GetToolScopesIxnAt (
+    ToolScopeList  toolScopes,
     double xVal,
     bool excludeProcessed = false,
     int startIndex = 0,
     double tol = 1e-6) {
-      var res = new List<ToolScope<Tooling>> ();
+      var res = new ToolScopeList  ();
 
       for (int ii = startIndex; ii < toolScopes.Count; ii++) {
          var ts = toolScopes[ii];
@@ -376,14 +377,14 @@ public class PartMultiFrames {
       return res;
    }
 
-   public static List<ToolScope<Tooling>> GetToolScopesWithin (
-    List<ToolScope<Tooling>> toolScopes,
+   public static ToolScopeList  GetToolScopesWithin (
+    ToolScopeList  toolScopes,
     double startX,
     double endX,
     bool excludeProcessed = false,
     int startIndex = 0,
     double tol = 1e-6) {
-      var res = new List<ToolScope<Tooling>> ();
+      var res = new ToolScopeList  ();
 
       for (int ii = startIndex; ii < toolScopes.Count; ii++) {
          var ts = toolScopes[ii];
@@ -398,11 +399,11 @@ public class PartMultiFrames {
       return res;
    }
 
-   //public List<ToolScope<Tooling>> GetToolScopesWithin (
+   //public ToolScopeList  GetToolScopesWithin (
    // int startIndex, // By StartX sorted list
    // int endIndex, // By EndX sorted list
    // double tol = 1e-6) {
-   //   List<ToolScope<Tooling>> res = [];
+   //   ToolScopeList  res = [];
    //   res.Add (ToolScopesBySxList[startIndex]);
 
    //   for (int ii = startIndex; ii < endIndex; ii++) {
@@ -422,23 +423,23 @@ public class PartMultiFrames {
    //   return res;
    //}
 
-   public List<ToolScope<Tooling>> GetToolScopesWithin (
+   public ToolScopeList  GetToolScopesWithin (
     int startIndex, // By StartX sorted list
     int endIndex, // By EndX sorted list
     double tol = 1e-6) {
-      List<ToolScope<Tooling>> res = [];
+      ToolScopeList  res = [];
       for (int ii = startIndex; ii <= endIndex; ii++)
          res.Add (ToolScopesList[ii]);
 
       return res;
    }
 
-   public static List<ToolScope<Tooling>> GetToolScopesWithin (
-      List<ToolScope<Tooling>> toolScopes,
+   public static ToolScopeList  GetToolScopesWithin (
+      ToolScopeList  toolScopes,
     int startIndex, // By StartX sorted list
     int endIndex, // By EndX sorted list
     double tol = 1e-6) {
-      List<ToolScope<Tooling>> res = [];
+      ToolScopeList  res = [];
       for (int ii = startIndex; ii <= endIndex; ii++)
          res.Add (toolScopes[ii]);
 
@@ -497,6 +498,7 @@ public class PartMultiFrames {
          bool optimalFrameFound = false;
          int kk;
          for (kk = 0; kk < cfList.Count; kk++) {
+            //optimalFrame = null;
             // Find if the cf list is the last pass
             double partLastToolScopeEx = ToolScopesByExList.Count == 0
                                       ? 0
@@ -534,6 +536,7 @@ public class PartMultiFrames {
                 mcSpeed,
                 sOff2EngageTime,
                 standOffDist,
+                Work.Bound,
                 isPossibleLastFrame);
             checkIndicexList.Add ((stIndex, endIndex));
             prevStIx = stIndex; prevEndIx = endIndex;
@@ -545,6 +548,15 @@ public class PartMultiFrames {
                   if (totalTime > frame.Value.TotalMachiningTime) {
                      optimalFrame = frame.Value;
                      totalTime = frame.Value.TotalMachiningTime;
+                     if (optimalFrame != null) {
+                        OptimalFrames.Add (optimalFrame);
+                        optimalFrameFound = true;
+                        if (optimalFrame.Value.FinishPositionHead1.HasValue)
+                           prevFrameEndPosH1 = optimalFrame.Value.FinishPositionHead1;
+                        if (optimalFrame.Value.FinishPositionHead2.HasValue)
+                           prevFrameEndPosH2 = optimalFrame.Value.FinishPositionHead2;
+                        machinableFrames.Add (optimalFrame.Value);
+                     }
                   }
                }
                frames.Add (frame.Value);
@@ -552,17 +564,8 @@ public class PartMultiFrames {
             }
          }
 
-         if (optimalFrame == null)
-            continue;
-         else {
-            OptimalFrames.Add (optimalFrame);
-            optimalFrameFound = true;
-            if (optimalFrame.Value.FinishPositionHead1.HasValue)
-               prevFrameEndPosH1 = optimalFrame.Value.FinishPositionHead1;
-            if (optimalFrame.Value.FinishPositionHead2.HasValue)
-               prevFrameEndPosH2 = optimalFrame.Value.FinishPositionHead2;
-            machinableFrames.Add (optimalFrame.Value);
-         }
+         
+         
          //throw new Exception ($"Could not find the optimal frame for Set {ii}");
 
          // Get the next start and end indices
@@ -595,6 +598,8 @@ public class PartMultiFrames {
          if (ii < 0 )
             break;
       }
+      
+      
       //if (ccFrames.Count != FrameHeaders.Count)
       //   throw new Exception ("ccFrames.Count != FrameHeaders.Count, serious error");
    }
@@ -615,7 +620,7 @@ public class PartMultiFrames {
       }
    }
 
-   private static void MarkList (List<ToolScope<Tooling>>? list) {
+   private static void MarkList (ToolScopeList ? list) {
       if (list == null)
          return;
 
@@ -626,32 +631,21 @@ public class PartMultiFrames {
       }
    }
 
-   List<List<GCodeSeg>[]> mCutScopeTraces = [];
-   public void AllocateCutScopeTraces (int nCutScopes) {
-      mCutScopeTraces = [];
-      for (int i = 0; i < nCutScopes; i++) {
-         // Create a new List<GCodeSeg>[] to hold the GCodeSeg lists
-         List<GCodeSeg>[] newCutScope = [[], []]; // Adjust the size based on your needs
+   public void GenerateGCode () {
+      // Allocate for CutscopeTraces
+      if (OptimalFrames == null || OptimalFrames.Count == 0)
+         throw new Exception ("Optimal frames computatio failed");
+      GCodeGen.Allocate4Traces (OptimalFrames.Count);
+      
+      var prevPartRatio = GCodeGen.PartitionRatio;
+      if (!GCodeGen.OptimizePartition) GCodeGen.PartitionRatio = 0.5;
+      if (GCodeGen.Heads == MCSettings.EHeads.Left || GCodeGen.Heads == MCSettings.EHeads.Right) GCodeGen.PartitionRatio = 1.0;
+      GCodeGen.BlockNumber = 0;
+      GCodeGen.GenerateGCode (IGCodeGenerator.ToolHeadType.Master, OptimalFrames);
+      GCodeGen.GenerateGCode (IGCodeGenerator.ToolHeadType.Slave, OptimalFrames);
 
-         // Add the new array to mCutScopeTraces
-         mCutScopeTraces.Add (newCutScope);
-      }
+      GCodeGen.BlockNumber = 0;
+      FrameTraces = GCodeGen.FrameTraces;
+      GCodeGen.PartitionRatio = prevPartRatio;
    }
-   //public void GenerateGCode () {
-   //   if (OptimalFrames == null )
-   //      return;
-   //   // Allocate for CutscopeTraces
-   //   AllocateCutScopeTraces (OptimalFrames.Count);
-   //   //var mcCutScopes = MachinableCutScope.CreateMachinableCutScopes (mMachinableCutScopes, mGC);
-   //   var prevPartRatio = GCodeGen.PartitionRatio;
-   //   if (!GCodeGen.OptimizePartition) GCodeGen.PartitionRatio = 0.5;
-   //   if (GCodeGen.Heads == MCSettings.EHeads.Left || GCodeGen.Heads == MCSettings.EHeads.Right) GCodeGen.PartitionRatio = 1.0;
-   //   GCodeGen.BlockNumber = 0;
-   //   GCodeGen.GenerateGCode (GCodeGenerator.ToolHeadType.Master, mcCutScopes);
-   //   GCodeGen.GenerateGCode (GCodeGenerator.ToolHeadType.Slave, mcCutScopes);
-
-   //   GCodeGen.BlockNumber = 0;
-   //   //CutScopeTraces = mGC.CutScopeTraces;
-   //   GCodeGen.PartitionRatio = prevPartRatio;
-   //}
 }

@@ -14,5 +14,6 @@ namespace ProfileCAM.Core.Geometries {
       public abstract bool IsCircle { get; set; }
       public abstract Curve3 Curve { get; set; }
       public abstract FCCurve3 ReverseClone ();
+      public abstract Bound3 Bounds { get; }
    }
 }

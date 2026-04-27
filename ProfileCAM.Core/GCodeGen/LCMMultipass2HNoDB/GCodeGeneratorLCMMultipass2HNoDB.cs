@@ -1,31 +1,35 @@
 ﻿using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Text.RegularExpressions;
+using System.Collections.Generic;
 using ProfileCAM.Core.Geometries;
-using ProfileCAM.Core.Optimizer;
+
 using Flux.API;
 using static ProfileCAM.Core.MCSettings;
 using static ProfileCAM.Core.Utils;
 using ProfileCAM.Core.GCodeGen.GCodeFeatures;
 using ProfileCAM.Core.Processes;
+using static ProfileCAM.Core.GCodeGen.IGCodeGenerator;
+using ProfileCAM.Core.Optimizer;
+
 
 namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB {
 
-   public class GCodeGenerator4LCMMultipass2HNoDB : IGCodeGenerator{
+   public class GCodeGenerator4LCMMultipass2HNoDB : IGCodeGenerator {
       #region Data Members
       List<E3Flex> mFlexes;      // Flexes in the workpiece
       List<E3Plane> mPlanes;     // Planes in this workpiece
       double mThickness;         // Workpiece thickness
-      readonly Point3[] mToolPos = new Point3[2];     // Tool position (for each head)
-      readonly Vector3[] mToolVec = new Vector3[2];   // Tool orientaton (for each head)
-      readonly Point3[] mSafePoint = new Point3[2];
+      readonly Point3[] mToolPos = new Point3[4];     // Tool position (for each head)
+      readonly Vector3[] mToolVec = new Vector3[4];   // Tool orientaton (for each head)
+      readonly Point3[] mSafePoint = new Point3[4];
       //readonly bool mDebug = false;
       StreamWriter sw;
       bool mMachiningDirectiveSet = false;
       double mCurveLeastLength = 0.5;
       double[] mPercentLengths = [0.25, 0.5, 0.75];
       int mProgramNumber;
-      int mCutScopeNo = 0;
+      double mCutScopeNo = 0;
+      int mFrameNo = 0;
       string NCName;
       bool mLastCutScope = false;
       ToolingSegment? mPrevToolingSegment = null;
@@ -35,24 +39,31 @@ namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB {
 
       #region GCode Generator Properties
       //public List<GCodeSeg>[] mTraces = [[], []];
-      public List<GCodeSeg>[] Traces { get; set; } = [[], []];
+      public List<GCodeSeg>[] Traces { get; set; } = [[], [], [], []];
       IGenesysHub mGHub;
       //List<List<GCodeSeg>[]> mCutScopeTraces = [];
-      public List<List<GCodeSeg>[]> CutScopeTraces {
-         get => throw new NotImplementedException();
-      }
+      /// <summary>
+      /// List<GCodeSeg> is the ToolingList
+      /// List<GCodeSeg>[] stores two entries, one for head1, and another for head2
+      /// List<List<GCodeSeg>[]> stores ToolingList[] for entire cutscopes 
+      /// </summary>
+      public List<List<GCodeSeg>[]> CutScopeTraces { get; set; } = [[], [], [], []];
 
       List<List<GCodeSeg>[]> mFrameTraces = [];
-      public List<List<GCodeSeg>[]> FrameTraces => mFrameTraces;
+
+      public List<List<GCodeSeg>[]> FrameTraces {
+         get => mFrameTraces;
+      }
       public IGenesysHub Process { get => mGHub; set => mGHub = value; }
       List<NotchAttribute> mNotchAttributes = [];
       public List<NotchAttribute> NotchAttributes { get { return mNotchAttributes; } }
-      public List<MachinableCutScope> MachinableCutScopes { 
+      public List<MachinableCutScope> MachinableCutScopes {
          get => throw new NotSupportedException ("MachinableCutScopes is not supported in this implementation.");
          set => throw new NotSupportedException ("MachinableCutScopes is not supported in this implementation.");
       }
       //public List<List<Tooling>> Frames {  get; private set; }
       public int BlockNumber { get; set; } = 0;
+      int BucketNumber { get; set; } = -1; // Used as index in Traces
       public bool CreateDummyBlock4Master { get; set; } = false;
       public string DINFileNameHead1 { get; set; }
       public string DINFileNameHead2 { get; set; }
@@ -400,6 +411,7 @@ namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB {
          mMarkProgNo = MarkProgNo;
          mHashProgNo.Clear ();
          mLastCutScope = false;
+         BucketNumber = -1;
       }
       #endregion
 
@@ -438,7 +450,7 @@ namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB {
       public string BlockNumberMark { get; set; } = "";
       void OutN (StreamWriter sw, string comment = "") {
          int nNo;
-         if (EnableMultipassCut) nNo = mCutScopeNo * mBaseBlockNo + BlockNumber;
+         if (EnableMultipassCut) nNo = mFrameNo * mBaseBlockNo + BlockNumber;
          else nNo = BlockNumber;
          string line = $"N{nNo}" +
                  (string.IsNullOrEmpty (comment)
@@ -527,7 +539,7 @@ namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB {
          Others,
       }
 
-      
+
       #endregion
 
       #region Constructors and constructing utilities
@@ -535,7 +547,7 @@ namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB {
          mGHub = gHub;
          SetFromMCSettings ();
          MCSettings.It.OnSettingValuesChangedEvent += SetFromMCSettings;
-         Traces = [[], []];
+         Traces = [[], [], [], []];
          LeftToRightMachining = isLeftToRight;
          DinFilenameSuffix = "";
          NotchCutStartToken = "";
@@ -619,7 +631,7 @@ namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB {
       #endregion
 
       #region Utilies for Tool Transformations
-      
+
 
       public static Point3 XfmToMachine (IGCodeGenerator codeGen, Point3 ptWRTWCS) {
          Vector3 resVec;
@@ -635,7 +647,7 @@ namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB {
          return Geom.V2P (resVec);
       }
 
-      
+
 
       public XForm4 XfmToMachine (XForm4 xFormWCS) {
          XForm4 mcXForm;
@@ -644,7 +656,7 @@ namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB {
          return mcXForm;
       }
 
-      
+
 
       public Vector3 XfmToMachineVec (Vector3 vecWRTWCS) {
          Vector3 resVec;
@@ -803,7 +815,7 @@ namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB {
 
       #region Partition Implementation 
 
-      
+
 
       /// <summary>This creates the optimal partition of holes so both heads are equally busy</summary>
       public void CreatePartition (List<Tooling> cuts, bool optimize, Bound3 bound) {
@@ -944,7 +956,7 @@ namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB {
       /// <returns>Total tooling items (features) processed</returns>
       public int GenerateGCode (IGCodeGenerator.ToolHeadType head) {
          MachinableCutScope mccss = new (Process.Workpiece.Cuts, this);
-         if (CutScopeTraces.Count == 0) AllocateCutScopeTraces (1);
+         if (CutScopeTraces.Count == 0) Allocate4Traces (1);
          BlockNumber = 0;
          return GenerateGCode (head, [mccss]);
       }
@@ -954,15 +966,14 @@ namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB {
       /// the array of array of g codes.
       /// </summary>
       /// <param name="nCutScopes">Total number of Cut Scopes</param>
-      public void AllocateCutScopeTraces (int nCutScopes) {
-         //mCutScopeTraces = [];
-         //for (int i = 0; i < nCutScopes; i++) {
-         //   // Create a new List<GCodeSeg>[] to hold the GCodeSeg lists
-         //   List<GCodeSeg>[] newCutScope = [[], []]; // Adjust the size based on your needs
+      public void Allocate4Traces (int nframes) {
+         if (MCSettings.It.Machine == MachineType.LCMMultipass2H)
+            throw new Exception ("G Code is sought for wrong machine");
 
-         //   // Add the new array to mCutScopeTraces
-         //   mCutScopeTraces.Add (newCutScope);
-         //}
+         CutScopeTraces = new List<List<GCodeSeg>[]> (nframes);
+
+         for (int i = 0; i < nframes; i++)
+            CutScopeTraces.Add ([[], [], [], []]);
       }
 
       /// <summary>
@@ -1005,169 +1016,279 @@ namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB {
       /// <returns>The generated G Code</returns>
       /// <exception cref="Exception">Throws an exception if an error occurs during G Code generation</exception>
       public int GenerateGCode (IGCodeGenerator.ToolHeadType head, List<MachinableCutScope> mcCutScopes) {
-         var xPartition = mcCutScopes.Sum (cs => cs.ToolingScopesWidthH1);
-         List<List<Tooling>> frames = [];
-         foreach (var csc in mcCutScopes)
-            frames.Add (csc.Toolings);
-         var nToolingsWritten = GenerateGCode (head, frames, xPartition);
-         if (nToolingsWritten > 0)
-            MachinableCutScopes = mcCutScopes;
-         return nToolingsWritten;
+         throw new NotImplementedException ();
       }
+#nullable enable
+      public int GenerateGCode (ToolHeadType head, List<Frame?>? frames) {
+         if (frames == null)
+            throw new Exception ("No frames found");
 
-      public int GenerateGCode (IGCodeGenerator.ToolHeadType head, List<List<Tooling>> frames, double xPartition) { // List<Tooling> is One Frame
+         if (head == ToolHeadType.MasterB2 || head == ToolHeadType.SlaveB2)
+            throw new ArgumentException ($"head can not be {ToolHeadType.MasterB2} or {ToolHeadType.SlaveB2}. Use only {ToolHeadType.Master} or {ToolHeadType.Slave}");
+
+         // ** Data member Initializations **
+         // Data member values setup
          mCutscopeToolingLengths = [];
          Head = head;
          CreateDummyBlock4Master = false;
+         mLastCutScope = false;
+         BlockNumber = 1;
 
-         string ncName = Utils.BuildDINFileName (Process.Workpiece.NCFileName, (int)Head, PartConfigType, DinFilenameSuffix);
+         int tsWrittenB1 = 0, tsWrittenB2 = 0;
+
+         if (Process == null || Process.Workpiece == null)
+            throw new Exception ("Process or the Workpiece is null");
+
+         // ** DIN file name building and directory creation **
+         string ncName = Utils.BuildDINFileName (Process.Workpiece.NCFileName, BucketNumber, PartConfigType, DinFilenameSuffix);
          string ncFolder;
          // Output file name builder for G Code for both the heads
          if (head == IGCodeGenerator.ToolHeadType.Master) {
             ncFolder = Path.Combine (NCFilePath, "Head1");
             Directory.CreateDirectory (ncFolder);
             DINFileNameHead1 = Path.Combine (ncFolder, ncName);
-         } else {
+         } else if (head == IGCodeGenerator.ToolHeadType.Slave) {
             ncFolder = Path.Combine (NCFilePath, "Head2");
             Directory.CreateDirectory (ncFolder);
             DINFileNameHead2 = Path.Combine (ncFolder, ncName);
          }
-         // Initial preperatory header
-         using (sw = new StreamWriter (head == 0 ? DINFileNameHead1 : DINFileNameHead2)) {
-            sw.WriteLine ("%{1}({0})", ncName, ProgNo);
-            sw.WriteLine ("N1");
-            sw.WriteLine ($"CNC_ID={(int)Head + 1}");
-            sw.WriteLine ($"Job_Length = {Math.Round (Process.Workpiece.Model.Bound.XMax, 1)}");
-            sw.WriteLine ($"Job_Width = {Math.Round (Process.Workpiece.Model.Bound.YMax - Process.Workpiece.Model.Bound.YMin, 1)}");
-            sw.WriteLine ("Job_Height = {0}\r\nJob_Thickness = {1}", Math.Round (Process.Workpiece.Model.Bound.ZMax - Process.Workpiece.Model.Bound.ZMin, 1), Math.Round (mThickness, 1));
-            sw.WriteLine ($"X_Partition = {xPartition:F3}");
 
-            // Output the outer radius
-            if (JobInnerRadius.EQ (0))
-               throw new Exception ("Job inner radius is ZERO.");
-            if (JobThickness.EQ (0))
-               throw new Exception ("Job thickness is ZERO.");
-            double jobOuterRadius = JobInnerRadius + JobThickness;
-
-            if (!mWebFlangeOnly) sw.WriteLine ($"Job_O_Radius = {Math.Round (jobOuterRadius, 1)}");
-
-            // Output the lh or rh component
-            sw.WriteLine ($"Job_Type  = {(PartConfigType == MCSettings.PartConfigType.LHComponent ? 1 : 2)}");
-            if (!string.IsNullOrEmpty (MarkText)) {
-               sw.WriteLine ($"Marking_X_Pos = {Math.Round (MarkTextPosX, 1)}");
-               sw.WriteLine ($"Marking_Y_Pos = {Math.Round (MarkTextPosY, 1)}");
-               int textRotAngle = MarkAngle switch {
-                  ERotate.Rotate0 => 0,
-                  ERotate.Rotate90 => 90,
-                  ERotate.Rotate180 => 180,
-                  ERotate.Rotate270 => 270,
-                  _ => 0
-               };
-               sw.WriteLine ($"Marking_Angle = {textRotAngle}");
-               sw.WriteLine ($"Marking_Height = {MarkTextHeight}");
-               sw.WriteLine ($"G253 F=\"ModelTag:{MarkText}\" E0");
+         // ** Compute total tooling length of all toolings both the buckets ** 
+         // of the current head. ( include all the buckets )
+         for (int jj = 0; jj < frames.Count; jj++) {
+            var fr = frames[jj];
+            if (fr == null) continue;
+            if (head == ToolHeadType.Master || head == ToolHeadType.MasterB2) {
+               mCutscopeToolingLengths.Add (
+                   GetTotalToolingsLength (fr.Value.Bucket11ToolScopes) +
+                   GetTotalToolingsLength (fr.Value.Bucket12ToolScopes));
+            } else {
+               mCutscopeToolingLengths.Add (
+                   GetTotalToolingsLength (fr.Value.Bucket21ToolScopes) +
+                   GetTotalToolingsLength (fr.Value.Bucket22ToolScopes));
             }
-            sw.WriteLine ("(BF-Soffset:S1, TF-Soffset:S2, WEB_BF-Soffset:S3, WEB_TF-Soffset:S4, Marking:S3)\r\n(Block No - BF:N1001~N1999, TF:N2001~N2999, WEB:N3001~N3999, Notch:N4001~N4999, " +
-               "CutOut:N5001~N5999)" +
-               "\r\n(BlockType - 0:Flange Holes, 1:Web Block with BF reference, -1:Web Block with TF reference, 2:Notch, 3:Cutout, 4:Marking)" +
-               "\r\n(PM:Pierce Method, CM:Cutting Method, EM:End Method, ZRH: Z/Y Retract Height)\r\n(M50 - Sync On command, only in Tandem job Programs)\r\n(Job_TYPE - 1:LH JOB, 2:RH_JOB)\r\n" +
-               "(X_Correction & YZ_Correction Limit +/-5mm)");
-            sw.WriteLine (GetGCodeComment ($"Job Inner Radius = {JobInnerRadius:F3}"));
-            sw.WriteLine (GetGCodeComment ($"Flex Cutting Gap = {FlexCuttingGap:F3}"));
-            sw.WriteLine (GetGCodeComment ($"Multipass = {EnableMultipassCut && MultiPassCuts.IsMultipassCutTask (Process.Workpiece.Model)}"));
-            //sw.WriteLine (GetGCodeComment ($"Least Wire Joint Length = {LeastWJLength}"));
-            sw.WriteLine (GetGCodeComment ($"Version = {MCSettings.It.Version}"));
-            sw.WriteLine ("(---Don't alter above Parameters---)");
-            sw.WriteLine ();
+         }
 
-            if (Heads == EHeads.Both) sw.WriteLine ("M50");
-            sw.WriteLine ("M15");
-            sw.WriteLine ("H=LaserTableID");
-            sw.WriteLine ("G61\t( Stop Block Preparation )");
-            sw.WriteLine (GetGCodeApplyToolDiaCompensation ());
-            sw.WriteLine (GetGCodeComment ($" Cutting with {Head} head "));
-            foreach (var toolings in frames)
-               mCutscopeToolingLengths.Add (GetTotalToolingsLength (toolings));
+
+         // ** Evaluate Config XForms **
+         // The machine (inverse) transforms are computed. This transformation matrix the 
+         // key to perform all the computations
+         EvaluateToolConfigXForms (Process.Workpiece);
+
+
+         // ** OPen the DIN file for writing ** 
+         using (sw = new StreamWriter ((head == ToolHeadType.Master || head == ToolHeadType.MasterB2) ? DINFileNameHead1 : DINFileNameHead2)) {
+
+            // ** WRITE DIN HEADER **
             var totalToolingsLen = mCutscopeToolingLengths.Sum ();
-            string ncname = NCName;
-            if (ncname.Length > 20) ncname = ncname[..20];
-            double totalMarkLength = 0;
-            sw.WriteLine ($"G253 E0 F=\"0=1:{ncname}:{Math.Round (totalToolingsLen, 2)}," +
-                   $"{Math.Round (totalMarkLength, 2)}\"");
-            sw.WriteLine ($"G20 X=BlockID");
+            var xPartition = Frame.GetCumuativeSumOfScopes (frames, head);
+            WriteDINHeader (xPartition, totalToolingsLen);
 
-            // ****************************************************************************
-            // Logic to change scope goes here.
-            // 0. Create partition for multipass tooling ( sets head 0 or 1 )
-            // 1. Get all the toolings within a scope
-            // 2. Pass them into the following methods
-            //*****************************************************************************
+            // ** Get the last non empty index of frames **
+            int lastNonEmptyIndex = Utils.GetLastNonEmptyIndexPerBucket (frames, head);
 
-            // Instead of getting one cuts for head0 and head1, in the case of MULTIPASS we should get
-            // List<cuts> for head0 and another list<cuts> for head1
-            List<Tooling> totalCuts = [];
-            double xStart = 0;
-            double xEnd = 0;
-            mCutScopeNo = 0; int cnnt = 0;
-            mLastCutScope = false;
-            BlockNumber = 1;
-
-            for (int mm = 0; mm < frames.Count; mm++) {
+            mFrameNo = 0;
+            for (int ii = 0; ii < frames.Count; ii++) {
+               var frame = frames[ii] ?? throw new Exception ("Frame is null");
+               mFrameNo++;
                // CreateDummyBlock4Master Variable to signal the g code writer
                // if no G-statements is to be output, if the Slave head is
                // machining and master head is waiting from the start
                CreateDummyBlock4Master = false;
                mPrevToolingSegment = null;
-               var frame = frames[mm];
-               cnnt++;
 
-               if (Head == IGCodeGenerator.ToolHeadType.Master && mm == frames.Count - 2 && frames[mm + 1].Count == 0) mLastCutScope = true;
-               else if (Head == IGCodeGenerator.ToolHeadType.Slave && mm == frames.Count - 2 && frames[mm + 1].Count == 0) mLastCutScope = true;
-               else if (cnnt == frames.Count) mLastCutScope = true;
+               // ** Set the Last Cut Scope **
+               mLastCutScope = (ii == lastNonEmptyIndex);
 
-               Bound3 cutScopeBound = Utils.CalculateBound3 (frame);
-               (xStart, xEnd) = Tooling.GetScope (frame);
-               //xStart = mcCutScope.StartX; xEnd = mcCutScope.EndX;
-               if ((xEnd - xStart).SGT (MaxFrameLength)) throw new Exception ($"The Cut scope length is greater than Max Frame Length:{MaxFrameLength}, " +
-                  $"for the Cut Scope index {cnnt} starting from Tooling {frame.First ().Name}");
-               mCutScopeNo++;
-               mToolPos[0] = new Point3 (cutScopeBound.XMin, cutScopeBound.YMin, mSafeClearance);
-               mToolPos[1] = new Point3 (cutScopeBound.XMax, cutScopeBound.YMax, mSafeClearance);
-               mSafePoint[0] = new Point3 (cutScopeBound.XMin, cutScopeBound.YMin, 50);
-               mSafePoint[1] = new Point3 (cutScopeBound.XMax, cutScopeBound.YMax, 50);
 
-               // The machine (inverse) transforms are computed. This transformation matrix the 
-               // key to perform all the computations
-               EvaluateToolConfigXForms (Process.Workpiece);
-
-               // Allocate toolings for each head. It is assumed that partitioning is 
-               // already made.
-               List<Tooling> cuts = [];
-               var cutsHead1 = Utils.GetToolings4Head (frame, (int)IGCodeGenerator.ToolHeadType.Master, GCodeGenSettings);
-               var cutsHead2 = Utils.GetToolings4Head (frame, (int)IGCodeGenerator.ToolHeadType.Slave, GCodeGenSettings);
-               if (head == IGCodeGenerator.ToolHeadType.Master) cuts = cutsHead1;
-               else if (head == IGCodeGenerator.ToolHeadType.Slave) cuts = cutsHead2;
-
-               if ((cutsHead1.Count == 0 && cutsHead2.Count > 0 && Head == IGCodeGenerator.ToolHeadType.Master) ||
-                  (Head == IGCodeGenerator.ToolHeadType.Master && Heads == EHeads.Right)) {
-                  CreateDummyBlock4Master = true;
-                  if (cutsHead2.Count > 0)
-                     cuts = cutsHead2;
-                  WriteLineStatement (GetGCodeComment (" Writing dummy block for master head 1 "));
+               if (head == ToolHeadType.Master) {
+                  var bucket1TSS = frame.Bucket11ToolScopes;
+                  var bucket2TSS = frame.Bucket12ToolScopes;
+                  BucketNumber = 0;
+                  tsWrittenB1 = GenerateGCode (ToolHeadType.Master, frame, bucket1TSS, ii + 1, /*Bucket no head 11*/1);
+                  BucketNumber = 1;
+                  tsWrittenB2 = GenerateGCode (ToolHeadType.MasterB2, frame, bucket2TSS, ii + 1, /*Bucket no head 12*/2);
+               } else if (head == ToolHeadType.Slave) {
+                  var bucket1TSS = frame.Bucket21ToolScopes;
+                  var bucket2TSS = frame.Bucket22ToolScopes;
+                  BucketNumber = 2;
+                  tsWrittenB1 = GenerateGCode (ToolHeadType.Slave, frame, bucket1TSS, ii + 1, /*Bucket no head 21*/1);
+                  BucketNumber = 3;
+                  tsWrittenB2 = GenerateGCode (ToolHeadType.SlaveB2, frame, bucket2TSS, ii + 1, /*Bucket no head 22*/2);
                }
-               if (cuts.Count == 0) continue;
-
-               WriteCuts (cuts, cutScopeBound, xStart, ref xEnd, frame, totalCuts, mCutscopeToolingLengths[mm]);
             }
-            // Re init Traces with first entry of CutScopeTraces
-            sw.WriteLine ("\r\nN65535");
-            sw.WriteLine ("EndOfJob");
-            sw.WriteLine ("G99");
-            //string headInfo = $"for Head{(int)Head + 1}";
-            //MachinableCutScopes = mcCutScopes;
-            //Frames = frames;
-            return totalCuts.Count;
+            BucketNumber = -1;
+            WriteDINfooter ();
          }
+         return tsWrittenB1 + tsWrittenB2;
+      }
+
+
+      /// <summary>
+      /// 
+      /// </summary>
+      /// <param name="head">Can take all 4 values</param>
+      /// <param name="frame"></param>
+      /// <param name="toolScopeList"></param>
+      /// <param name="frameNo"></param>
+      /// <param name="bucketNo"></param>
+      /// <returns></returns>
+      /// <exception cref="ArgumentOutOfRangeException"></exception>
+      /// <exception cref="Exception"></exception>
+      public int GenerateGCode (IGCodeGenerator.ToolHeadType head, Frame frame, ToolScopeList toolScopeList,
+         int frameNo, int bucketNo) { // List<Tooling> is One Frame
+
+         // ** Compute Bounds of the current bucket **
+         Bound3 cutScopeBound = Utils.CalculateBound3PerBucket (frame, head);
+
+         // ** Set initial tooling positions **
+         mToolPos[0] = new Point3 (cutScopeBound.XMin, cutScopeBound.YMin, mSafeClearance);
+         mToolPos[1] = new Point3 (cutScopeBound.XMax, cutScopeBound.YMax, mSafeClearance);
+         mSafePoint[0] = new Point3 (cutScopeBound.XMin, cutScopeBound.YMin, 50);
+         mSafePoint[1] = new Point3 (cutScopeBound.XMax, cutScopeBound.YMax, 50);
+
+
+         // ** Find if the Master is to be made dummy **
+
+         // Find the total no of tool scopes per bucket
+         int nFrameToolScopesMaster = 0;
+         int nFrameToolScopesSlave = 0;
+         switch (head) {
+            case ToolHeadType.Master:
+            case ToolHeadType.Slave:
+               nFrameToolScopesMaster = frame.TotalToolScopes4HeadPerBucket (ToolHeadType.Master);
+               nFrameToolScopesSlave = frame.TotalToolScopes4HeadPerBucket (ToolHeadType.Slave);
+               break;
+            case ToolHeadType.MasterB2:
+            case ToolHeadType.SlaveB2:
+               nFrameToolScopesMaster = frame.TotalToolScopes4HeadPerBucket (ToolHeadType.MasterB2);
+               nFrameToolScopesSlave = frame.TotalToolScopes4HeadPerBucket (ToolHeadType.SlaveB2);
+               break;
+            default:
+               break;
+         }
+
+         ToolScopeList toolscopes = head switch {
+            IGCodeGenerator.ToolHeadType.Master => frame.FrameToolScopesH11,
+            IGCodeGenerator.ToolHeadType.MasterB2 => frame.FrameToolScopesH12,
+            IGCodeGenerator.ToolHeadType.Slave => frame.FrameToolScopesH21,
+            IGCodeGenerator.ToolHeadType.SlaveB2 => frame.FrameToolScopesH22,
+            _ => throw new ArgumentException ("Unknown head type")
+         };
+
+         if (head == ToolHeadType.Master) {
+            if ((nFrameToolScopesMaster == 0 && nFrameToolScopesSlave > 0 && Head == IGCodeGenerator.ToolHeadType.Master) ||
+               (Head == IGCodeGenerator.ToolHeadType.Master && Heads == EHeads.Right)) {
+               CreateDummyBlock4Master = true;
+               if (nFrameToolScopesSlave > 0)
+                  //cuts = cutsHead2;
+                  toolscopes = frame.FrameToolScopesPerBucket (IGCodeGenerator.ToolHeadType.Slave);
+               WriteLineStatement (GetGCodeComment ($" Writing dummy block for {IGCodeGenerator.ToolHeadType.Master} bucket -1"));
+            }
+         } else if (head == ToolHeadType.MasterB2) {
+            if ((nFrameToolScopesMaster == 0 && nFrameToolScopesSlave > 0 && Head == IGCodeGenerator.ToolHeadType.MasterB2) ||
+               (Head == IGCodeGenerator.ToolHeadType.MasterB2 && Heads == EHeads.Right)) {
+               CreateDummyBlock4Master = true;
+               if (nFrameToolScopesSlave > 0)
+                  //cuts = cutsHead2;
+                  toolscopes = frame.FrameToolScopesPerBucket (IGCodeGenerator.ToolHeadType.SlaveB2);
+               WriteLineStatement (GetGCodeComment ($" Writing dummy block for {IGCodeGenerator.ToolHeadType.MasterB2} bucket -2"));
+            }
+         }
+
+         if (toolscopes.Count == 0)
+            return 0;
+
+         double headNo = head switch {
+            IGCodeGenerator.ToolHeadType.Master
+            or IGCodeGenerator.ToolHeadType.MasterB2 => 0f,
+
+            IGCodeGenerator.ToolHeadType.Slave
+            or IGCodeGenerator.ToolHeadType.SlaveB2 => 1f,
+
+            _ => throw new ArgumentOutOfRangeException (nameof (head))
+         };
+
+         mCutScopeNo += ((headNo + 1) + frameNo / 10.0 + bucketNo / 100.0);
+
+         List<Tooling> writtenCuts = [];
+         var (MinStartX, MaxEndX) = Utils.GetScope (toolscopes) ?? throw new Exception ($"Could not calculate the scope of the toolscope list {toolScopeList}");
+
+         var cuts = toolscopes.Select (ts => ts.Tooling).ToList ();
+         WriteCuts (cuts, cutScopeBound, MinStartX, ref MaxEndX, frame, writtenCuts, mCutscopeToolingLengths[frameNo - 1]);
+
+         return writtenCuts.Count;
+      }
+
+
+      void WriteDINHeader (double xPartition, double totalToolingLength) {
+         sw.WriteLine ("%{1}({0})", NCName, ProgNo);
+         sw.WriteLine ("N1");
+         sw.WriteLine ($"CNC_ID={BucketNumber + 1}");
+         if (Process == null || Process.Workpiece == null)
+            throw new Exception ("Process or workpiece is null ");
+         sw.WriteLine ($"Job_Length = {Math.Round (Process.Workpiece.Model.Bound.XMax, 1)}");
+         sw.WriteLine ($"Job_Width = {Math.Round (Process.Workpiece.Model.Bound.YMax - Process.Workpiece.Model.Bound.YMin, 1)}");
+         sw.WriteLine ("Job_Height = {0}\r\nJob_Thickness = {1}", Math.Round (Process.Workpiece.Model.Bound.ZMax - Process.Workpiece.Model.Bound.ZMin, 1), Math.Round (mThickness, 1));
+         sw.WriteLine ($"X_Partition = {xPartition:F3}");
+
+         // Output the outer radius
+         if (JobInnerRadius.EQ (0))
+            throw new Exception ("Job inner radius is ZERO.");
+         if (JobThickness.EQ (0))
+            throw new Exception ("Job thickness is ZERO.");
+         double jobOuterRadius = JobInnerRadius + JobThickness;
+
+         if (!mWebFlangeOnly) sw.WriteLine ($"Job_O_Radius = {Math.Round (jobOuterRadius, 1)}");
+
+         // Output the lh or rh component
+         sw.WriteLine ($"Job_Type  = {(PartConfigType == MCSettings.PartConfigType.LHComponent ? 1 : 2)}");
+         if (!string.IsNullOrEmpty (MarkText)) {
+            sw.WriteLine ($"Marking_X_Pos = {Math.Round (MarkTextPosX, 1)}");
+            sw.WriteLine ($"Marking_Y_Pos = {Math.Round (MarkTextPosY, 1)}");
+            int textRotAngle = MarkAngle switch {
+               ERotate.Rotate0 => 0,
+               ERotate.Rotate90 => 90,
+               ERotate.Rotate180 => 180,
+               ERotate.Rotate270 => 270,
+               _ => 0
+            };
+            sw.WriteLine ($"Marking_Angle = {textRotAngle}");
+            sw.WriteLine ($"Marking_Height = {MarkTextHeight}");
+            sw.WriteLine ($"G253 F=\"ModelTag:{MarkText}\" E0");
+         }
+         sw.WriteLine ("(BF-Soffset:S1, TF-Soffset:S2, WEB_BF-Soffset:S3, WEB_TF-Soffset:S4, Marking:S3)\r\n(Block No - BF:N1001~N1999, TF:N2001~N2999, WEB:N3001~N3999, Notch:N4001~N4999, " +
+            "CutOut:N5001~N5999)" +
+            "\r\n(BlockType - 0:Flange Holes, 1:Web Block with BF reference, -1:Web Block with TF reference, 2:Notch, 3:Cutout, 4:Marking)" +
+            "\r\n(PM:Pierce Method, CM:Cutting Method, EM:End Method, ZRH: Z/Y Retract Height)\r\n(M50 - Sync On command, only in Tandem job Programs)\r\n(Job_TYPE - 1:LH JOB, 2:RH_JOB)\r\n" +
+            "(X_Correction & YZ_Correction Limit +/-5mm)");
+         sw.WriteLine (GetGCodeComment ($"Job Inner Radius = {JobInnerRadius:F3}"));
+         sw.WriteLine (GetGCodeComment ($"Flex Cutting Gap = {FlexCuttingGap:F3}"));
+         sw.WriteLine (GetGCodeComment ($"Multipass = {EnableMultipassCut && MultiPassCuts.IsMultipassCutTask (Process.Workpiece.Model)}"));
+         //sw.WriteLine (GetGCodeComment ($"Least Wire Joint Length = {LeastWJLength}"));
+         sw.WriteLine (GetGCodeComment ($"Version = {MCSettings.It.Version}"));
+         sw.WriteLine ("(---Don't alter above Parameters---)");
+         sw.WriteLine ();
+
+         if (Heads == EHeads.Both) sw.WriteLine ("M50");
+         sw.WriteLine ("M15");
+         sw.WriteLine ("H=LaserTableID");
+         sw.WriteLine ("G61\t( Stop Block Preparation )");
+         sw.WriteLine (GetGCodeApplyToolDiaCompensation ());
+         sw.WriteLine (GetGCodeComment ($" Cutting with {Head} head "));
+
+         string ncname = NCName;
+         if (ncname.Length > 20) ncname = ncname[..20];
+         double totalMarkLength = 0;
+         sw.WriteLine ($"G253 E0 F=\"0=1:{ncname}:{Math.Round (totalToolingLength, 2)}," +
+                $"{Math.Round (totalMarkLength, 2)}\"");
+         sw.WriteLine ($"G20 X=BlockID");
+      }
+
+      void WriteDINfooter () {
+         sw.WriteLine ("\r\nN65535");
+         sw.WriteLine ("EndOfJob");
+         sw.WriteLine ("G99");
       }
       /// <summary>
       /// This method prepares to write toolings and then writes the toolings
@@ -1182,8 +1303,9 @@ namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB {
       /// <exception cref="Exception">If the tooling X max of the is more than the 
       /// cutscope bound, an exception is thrown</exception>
       void WriteCuts (List<Tooling> cuts, Bound3 cutScopeBound, double xStart,
-         ref double xEnd, MachinableCutScope mcCutScope, List<Tooling> totalCuts,
+         ref double xEnd, Frame? frame, List<Tooling> totalCuts,
          double cutscopeToolingLength) {
+         if (frame == null) throw new Exception ("Frame is null");
          // GCode generation for all the eligible tooling starts here
          xEnd = cutScopeBound.XMax;
          foreach (var cut in cuts) {
@@ -1201,18 +1323,22 @@ namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB {
             cut.ProfileKind = Tooling.GetCutKind (cut, XForm4.IdentityXfm, profileKind: true);
          }
          // Compute the splitPartition
-         var xPartition = GetXPartition (mcCutScope.Toolings);
+         //var xPartition = GetXPartition (mcCutScope.Toolings);
+         double xPartition = 0;
+         (xStart, xPartition, xEnd) = frame.Value.GetXMarkers ();
 
          // Actually write toolings to g code
          DoWriteCuts (cuts, cutScopeBound, xStart, xPartition, xEnd, shouldOutputDigit: false, cutscopeToolingLength);
          totalCuts.AddRange (cuts);
 
          // Update Traces for this cutscope
-         if (CutScopeTraces[mCutScopeNo - 1][0].Count == 0)
-            CutScopeTraces[mCutScopeNo - 1][0] = Traces[0];
-         if (CutScopeTraces[mCutScopeNo - 1][1].Count == 0)
-            CutScopeTraces[mCutScopeNo - 1][1] = Traces[1];
-         Traces = [[], []];
+         var cutScope = CutScopeTraces[mFrameNo - 1];
+
+         for (int i = 0; i < 4; i++) {
+            if (cutScope[i].Count == 0)
+               cutScope[i] = Traces[i];
+         }
+         Traces = [[], [], [], []];
       }
 
       void WriteCuts (List<Tooling> cuts, Bound3 cutScopeBound, double xStart,
@@ -1242,11 +1368,13 @@ namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB {
          totalCuts.AddRange (cuts);
 
          // Update Traces for this cutscope
-         if (CutScopeTraces[mCutScopeNo - 1][0].Count == 0)
-            CutScopeTraces[mCutScopeNo - 1][0] = Traces[0];
-         if (CutScopeTraces[mCutScopeNo - 1][1].Count == 0)
-            CutScopeTraces[mCutScopeNo - 1][1] = Traces[1];
-         Traces = [[], []];
+         var cutScope = CutScopeTraces[mFrameNo - 1];
+
+         for (int i = 0; i < 4; i++) {
+            if (cutScope[i].Count == 0)
+               cutScope[i] = Traces[i];
+         }
+         Traces = [[], [], [], []];
       }
 
       /// <summary>
@@ -1287,7 +1415,7 @@ namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB {
          return PartConfigType == PartConfigType.LHComponent ? Utils.sXformLHInv : Utils.sXformRHInv;
       }
 
-      
+
 
       /// <summary>
       /// This method is used to write a curve, which can either be a line or 
@@ -1382,10 +1510,10 @@ namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB {
          EGCode gCmd;
          if (arcType == Utils.EArcSense.CW) gCmd = EGCode.G2; else gCmd = EGCode.G3;
          if (!CreateDummyBlock4Master) {
-            Traces[(int)Head].Add (new GCodeSeg (fcArc, arcStartPoint, arcEndPoint, arcCenter, radius, startNormal,
+            Traces[BucketNumber].Add (new GCodeSeg (fcArc, arcStartPoint, arcEndPoint, arcCenter, radius, startNormal,
                gCmd, EMove.Machining, toolingName));
-            mToolPos[(int)Head] = arcEndPoint;
-            mToolVec[(int)Head] = startNormal;
+            mToolPos[BucketNumber] = arcEndPoint;
+            mToolVec[BucketNumber] = startNormal;
          }
          switch (arcFlangeType) {
             case Utils.EFlange.Web:
@@ -1464,10 +1592,10 @@ namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB {
       //         EGCode gCmd;
       //         if (arcType == Utils.EArcSense.CW) gCmd = EGCode.G2; else gCmd = EGCode.G3;
       //         if (!CreateDummyBlock4Master) {
-      //            mTraces[(int)Head].Add (new GCodeSeg (fcArc.Arc, arcStartPoint, arcEndPoint, arcCenter, radius, startNormal,
+      //            mTraces[BucketNumber].Add (new GCodeSeg (fcArc.Arc, arcStartPoint, arcEndPoint, arcCenter, radius, startNormal,
       //               gCmd, EMove.Machining, toolingName));
-      //            mToolPos[(int)Head] = arcEndPoint;
-      //            mToolVec[(int)Head] = startNormal;
+      //            mToolPos[BucketNumber] = arcEndPoint;
+      //            mToolVec[BucketNumber] = startNormal;
       //         }
       //         switch (arcFlangeType) {
       //            case Utils.EFlange.Web:
@@ -1570,10 +1698,10 @@ namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB {
          EGCode gCmd;
          if (arcType == Utils.EArcSense.CW) gCmd = EGCode.G2; else gCmd = EGCode.G3;
          if (!CreateDummyBlock4Master) {
-            Traces[(int)Head].Add (new GCodeSeg (fcArc, arcStartPoint, arcEndPoint, arcCenter, radius, startNormal,
+            Traces[BucketNumber].Add (new GCodeSeg (fcArc, arcStartPoint, arcEndPoint, arcCenter, radius, startNormal,
             gCmd, EMove.Machining, toolingName));
-            mToolPos[(int)Head] = arcEndPoint;
-            mToolVec[(int)Head] = startNormal;
+            mToolPos[BucketNumber] = arcEndPoint;
+            mToolVec[BucketNumber] = startNormal;
          }
 
          Utils.EFlange arcFlangeType = Utils.GetArcPlaneFlangeType (startNormal, GetXForm ());
@@ -1626,14 +1754,14 @@ namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB {
          // Linear Move to start machining tooling
          Point3 toolingStartPointWithMachineClearance = toolingStartPosition + toolingStartNormal * GCodeGenSettings.Standoff;
          if (!CreateDummyBlock4Master) {
-            Traces[(int)Head].Add (new (mToolPos[(int)Head], toolingStartPointWithMachineClearance,
-            mToolVec[(int)Head], toolingStartNormal, EGCode.G1, EMove.Retract2Machining, toolingName));
-            mToolPos[(int)Head] = toolingStartPointWithMachineClearance;
-            mToolVec[(int)Head] = toolingStartNormal;
+            Traces[BucketNumber].Add (new (mToolPos[BucketNumber], toolingStartPointWithMachineClearance,
+            mToolVec[BucketNumber], toolingStartNormal, EGCode.G1, EMove.Retract2Machining, toolingName));
+            mToolPos[BucketNumber] = toolingStartPointWithMachineClearance;
+            mToolVec[BucketNumber] = toolingStartNormal;
          }
       }
 
-      
+
 
       /// <summary>
       /// Write a G Code comment for Point3 type
@@ -1725,16 +1853,16 @@ namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB {
          }
 
          if (!CreateDummyBlock4Master) {
-            Traces[(int)Head].Add (new GCodeSeg (
-                mToolPos[(int)Head],
+            Traces[BucketNumber].Add (new GCodeSeg (
+                mToolPos[BucketNumber],
                 endPointWithMCClearance,
                 tsStartNormalDir,
                 tsEndNormalDir,
                 EGCode.G1,
                 EMove.Machining,
                 toolingName));
-            mToolPos[(int)Head] = endPointWithMCClearance;
-            mToolVec[(int)Head] = tsEndNormalDir;
+            mToolPos[BucketNumber] = endPointWithMCClearance;
+            mToolVec[BucketNumber] = tsEndNormalDir;
          }
       }
 
@@ -1820,16 +1948,16 @@ namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB {
                    createDummyBlock4Master: CreateDummyBlock4Master);
 
             if (!CreateDummyBlock4Master) {
-               Traces[(int)Head].Add (new GCodeSeg (
-                   mToolPos[(int)Head],
+               Traces[BucketNumber].Add (new GCodeSeg (
+                   mToolPos[BucketNumber],
                    endPointWithMCClearance,
                    startNormal,
                    endNormal,
                    EGCode.G1,
                    EMove.Machining,
                    toolingName));
-               mToolPos[(int)Head] = endPointWithMCClearance;
-               mToolVec[(int)Head] = endNormal;
+               mToolPos[BucketNumber] = endPointWithMCClearance;
+               mToolVec[BucketNumber] = endNormal;
             }
          } else {
             if (currFlangeType == Utils.EFlange.Top || currFlangeType == Utils.EFlange.Bottom)
@@ -1858,16 +1986,16 @@ namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB {
                    createDummyBlock4Master: CreateDummyBlock4Master);
 
             if (!CreateDummyBlock4Master) {
-               Traces[(int)Head].Add (new GCodeSeg (
-                   mToolPos[(int)Head],
+               Traces[BucketNumber].Add (new GCodeSeg (
+                   mToolPos[BucketNumber],
                    endPointWithMCClearance,
                    startNormal,
                    endNormal,
                    EGCode.G1,
                    EMove.Machining,
                    toolingName));
-               mToolPos[(int)Head] = endPointWithMCClearance;
-               mToolVec[(int)Head] = endNormal;
+               mToolPos[BucketNumber] = endPointWithMCClearance;
+               mToolVec[BucketNumber] = endNormal;
             }
          }
       }
@@ -1890,7 +2018,7 @@ namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB {
          double angleBetweenZAxisAndCurrToolingEndPoint;
 
          bool planeChange = false;
-         var angleBetweenPrevAndCurrNormal = endNormal.AngleTo (mToolVec[(int)Head]).R2D ();
+         var angleBetweenPrevAndCurrNormal = endNormal.AngleTo (mToolVec[BucketNumber]).R2D ();
          if (!angleBetweenPrevAndCurrNormal.EQ (0)) planeChange = true;
 
          angleBetweenZAxisAndCurrToolingEndPoint = endNormal.AngleTo (XForm4.mZAxis).R2D ();
@@ -1943,10 +2071,10 @@ namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB {
                   lineSegmentComment, createDummyBlock4Master: CreateDummyBlock4Master);
          }
          if (!CreateDummyBlock4Master) {
-            Traces[(int)Head].Add (new GCodeSeg (mToolPos[(int)Head], endPointWithMCClearance,
+            Traces[BucketNumber].Add (new GCodeSeg (mToolPos[BucketNumber], endPointWithMCClearance,
                startNormal, endNormal, EGCode.G1, EMove.Machining, toolingName));
-            mToolPos[(int)Head] = endPointWithMCClearance;
-            mToolVec[(int)Head] = endNormal;
+            mToolPos[BucketNumber] = endPointWithMCClearance;
+            mToolVec[BucketNumber] = endNormal;
          }
       }
 
@@ -2113,6 +2241,7 @@ namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB {
             // Write all other features such as Holes, Cutouts and edge notches
             for (int ii = 0; ii < toolingSegmentsList.Count; ii++) {
                var (FCCurve, startNormal, endNormal) = toolingSegmentsList[ii];
+               if (FCCurve == null) throw new Exception ("Curve is not set in ToolingSegment");
                startNormal = startNormal.Normalized ();
                endNormal = endNormal.Normalized ();
                var startPoint = FCCurve.Start;
@@ -2124,7 +2253,8 @@ namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB {
                   var arcPlaneType = Utils.GetArcPlaneType (startNormal, GetXForm ());
                   var arcFlangeType = Utils.GetArcPlaneFlangeType (startNormal, GetXForm ());
                   (var center, _) = Geom.EvaluateCenterAndRadius (FCCurve as FCArc3);
-                  WriteArc (FCCurve as FCArc3, arcPlaneType, arcFlangeType, center, startPoint, endPoint, startNormal,
+                  if (FCCurve is not FCArc3 fArc) throw new Exception ("Curve is not set in ToolingSegment");
+                  WriteArc (fArc, arcPlaneType, arcFlangeType, center, startPoint, endPoint, startNormal,
                      toolingItem.Name);
                } else WriteLineSeg (startPoint, endPoint, startNormal, endNormal, currPlaneType, previousPlaneType,
                   Utils.GetFlangeType (toolingItem, new ()), toolingItem.Name, relativeCoords: relativeCoords);
@@ -2165,10 +2295,10 @@ namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB {
       /// </summary>
       void MoveToSafety () {
          if (!CreateDummyBlock4Master) {
-            Traces[(int)Head].Add (new (mSafePoint[(int)Head], mToolPos[(int)Head], XForm4.mZAxis, XForm4.mZAxis,
+            Traces[BucketNumber].Add (new (mSafePoint[BucketNumber], mToolPos[BucketNumber], XForm4.mZAxis, XForm4.mZAxis,
             EGCode.G0, EMove.Retract2SafeZ, "No tooling"));
 
-            mToolVec[(int)Head] = XForm4.mZAxis;
+            mToolVec[BucketNumber] = XForm4.mZAxis;
          }
       }
 
@@ -2184,10 +2314,10 @@ namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB {
          var toolingEPRetracted =
                 Utils.MovePoint (endPt, endNormal, mRetractClearance);
          if (!CreateDummyBlock4Master) {
-            Traces[(int)Head].Add (new (mToolPos[(int)Head], toolingEPRetracted, endNormal, endNormal,
+            Traces[BucketNumber].Add (new (mToolPos[BucketNumber], toolingEPRetracted, endNormal, endNormal,
             EGCode.G0, EMove.Retract, toolingName));
-            mToolPos[(int)Head] = toolingEPRetracted;
-            mToolVec[(int)Head] = endNormal.Normalized ();
+            mToolPos[BucketNumber] = toolingEPRetracted;
+            mToolVec[BucketNumber] = endNormal.Normalized ();
          }
       }
 
@@ -2214,10 +2344,10 @@ namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB {
             Utils.LinearMachining (sw, mcCoordsPrevToolingEPRetractedSafeZ.X, mcCoordsPrevToolingEPRetractedSafeZ.Y,
                mcCoordsPrevToolingEPRetractedSafeZ.Z, 0, Rapid, createDummyBlock4Master: CreateDummyBlock4Master);
             if (!CreateDummyBlock4Master) {
-               Traces[(int)Head].Add (new GCodeSeg (mToolPos[(int)Head], prevToolingEPRetractedSafeZ, mToolVec[(int)Head],
+               Traces[BucketNumber].Add (new GCodeSeg (mToolPos[BucketNumber], prevToolingEPRetractedSafeZ, mToolVec[BucketNumber],
                XForm4.mZAxis, EGCode.G0, EMove.Retract2SafeZ, prevToolingName));
-               mToolPos[(int)Head] = prevToolingEPRetractedSafeZ;
-               mToolVec[(int)Head] = XForm4.mZAxis;
+               mToolPos[BucketNumber] = prevToolingEPRetractedSafeZ;
+               mToolVec[BucketNumber] = XForm4.mZAxis;
             }
          }
          (var currSegStCurve, var currSegStCurveStNormal, _) = currToolingSegs[0];
@@ -2232,11 +2362,11 @@ namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB {
             Utils.RapidPosition (sw, mcCoordsCurrToolingSPRetractedSafeZ.X, mcCoordsCurrToolingSPRetractedSafeZ.Y,
                mcCoordsCurrToolingSPRetractedSafeZ.Z, 0, createDummyBlock4Master: CreateDummyBlock4Master);
             if (!CreateDummyBlock4Master) {
-               Traces[(int)Head].Add (new (mToolPos[(int)Head], currToolingSPRetractedSafeZ, mToolVec[(int)Head],
+               Traces[BucketNumber].Add (new (mToolPos[BucketNumber], currToolingSPRetractedSafeZ, mToolVec[BucketNumber],
                XForm4.mZAxis, EGCode.G0,
                EMove.SafeZ2SafeZ, currentToolingName));
-               mToolPos[(int)Head] = currToolingSPRetractedSafeZ;
-               mToolVec[(int)Head] = XForm4.mZAxis;
+               mToolPos[BucketNumber] = currToolingSPRetractedSafeZ;
+               mToolVec[BucketNumber] = XForm4.mZAxis;
             }
          }
       }
@@ -2267,10 +2397,10 @@ namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB {
                RapidMoveToPiercingPosition (toolingStartPt, toolingStartNormalVec, featType, usePingPongOption, comment);
 
             if (!CreateDummyBlock4Master) {
-               Traces[(int)Head].Add (new (mToolPos[(int)Head], currToolingStPtRetracted,
-               mToolVec[(int)Head], toolingStartNormalVec, EGCode.G0, EMove.SafeZ2Retract, toolingName));
-               mToolPos[(int)Head] = currToolingStPtRetracted;
-               mToolVec[(int)Head] = toolingStartNormalVec.Normalized ();
+               Traces[BucketNumber].Add (new (mToolPos[BucketNumber], currToolingStPtRetracted,
+               mToolVec[BucketNumber], toolingStartNormalVec, EGCode.G0, EMove.SafeZ2Retract, toolingName));
+               mToolPos[BucketNumber] = currToolingStPtRetracted;
+               mToolVec[BucketNumber] = toolingStartNormalVec.Normalized ();
             }
          }
       }
@@ -2346,17 +2476,21 @@ namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB {
       /// in ascertaining the plane normal if an arc is involved</param>
       public void WriteProgramHeader (Tooling toolingItem, List<ToolingSegment> segs, /*double frameFeed, */
          double xStart, double xPartition, double xEnd, bool isLastToolingSeg, /*bool isToBeTreatedAsCutOut,*/
-         Tooling prevToolingItem = null, bool isValidNotch = false, bool isFlexCut = false,
+         Tooling? prevToolingItem = null, bool isValidNotch = false, bool isFlexCut = false,
          int startIndex = -1, int endIndex = -1, int refSegIndex = 0, ToolingSegment? nextTs = null) {
          string comment = $"** Tooling Name : {toolingItem.Name} - {toolingItem.FeatType} **";
 
          // Write N Token
          OutN (sw, comment);
-         sw.WriteLine ("CutScopeNo={0}", mCutScopeNo);
+         sw.WriteLine ($"CutScopeNo={mCutScopeNo:F2}");
          if (isValidNotch || toolingItem.IsCutout ()) mProgramNumber++;
 
          // Write block type
          WriteBlockType (toolingItem, segs[refSegIndex], nextTs: nextTs, isValidNotch, isFlexCut/*, isToBeTreatedAsCutOut*/);
+
+         if (Process == null || Process.Workpiece == null)
+            throw new Exception ("Process or Workpiece not set");
+
          double SplitEndX = xEnd;
          if (mLastCutScope && isLastToolingSeg) SplitEndX = Process.Workpiece.Bound.XMax;
 
@@ -2390,11 +2524,15 @@ namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB {
          Tooling prevToolingItem = null, ToolingSegment? refSeg = null, ToolingSegment? nextSeg = null) {
          string comment = $"** Tooling Name : {toolingItem.Name} - {toolingItem.FeatType} **";
          OutN (sw, comment);
-         sw.WriteLine ("CutScopeNo={0}", mCutScopeNo);
+         sw.WriteLine ($"CutScopeNo={mCutScopeNo:F2}");
          if (isValidNotch || toolingItem.IsCutout () /*|| (toolingItem.IsHole () && isToBeTreatedAsCutOut)*/) mProgramNumber++;
          WriteBlockType (toolingItem, refSeg, nextTs: nextSeg, isValidNotch, isFlexCut/*, isToBeTreatedAsCutOut:false*/);
          double SplitEndX = xEnd;
-         if (mLastCutScope && isLastToolingSeg) SplitEndX = Process.Workpiece.Bound.XMax;
+         if (mLastCutScope && isLastToolingSeg) {
+            if (Process == null || Process.Workpiece == null)
+               throw new Exception ("Process or Workpiece is not set");
+            SplitEndX = Process.Workpiece.Bound.XMax;
+         }
 
          sw.WriteLine ("SplitStartX={0} SplitPartitionX={1} SplitEndX={2} ( Cut Scope Length:{3} )",
             xStart.ToString ("F3"), xPartition.ToString ("F3"), SplitEndX.ToString ("F3"), (xEnd - xStart).ToString ("F3"));
@@ -2766,6 +2904,25 @@ namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB {
          }
          return totalToolingCutLength;
       }
+
+      public double GetTotalToolingsLength (ToolScopeList toolScopes) {
+         // For notches, compute the length
+         // Compute the total tooling lengths of Hole, Cutouts, and Notches
+         double totalToolingCutLength = toolScopes
+             .Where (a => (a.Tooling.IsCutout () || a.Tooling.IsHole ()))
+             .Sum (a => a.Tooling.Perimeter);
+
+         foreach (var ti in toolScopes) {
+            if (ti.Tooling.EdgeNotch)
+               continue;
+            else
+               totalToolingCutLength += Notch.GetTotalNotchToolingLength (
+                   Process.Workpiece.Bound, ti.Tooling, mPercentLengths, NotchWireJointDistance,
+                   NotchApproachLength, mCurveLeastLength, !NotchWireJointDistance.EQ (0),
+                JobInnerRadius, JobThickness, PartConfigType);
+         }
+         return totalToolingCutLength;
+      }
       /// <summary>
       /// This is the main method which prepares the machine with calling various pre-machining
       /// settings/macros, and then calls WriteTooling, which actually calls machining G Codes.
@@ -2804,6 +2961,7 @@ namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB {
 
             // Debug_Debug
             firstTlgStartPoint = toolingItem.Segs.ToList ()[0].Curve.Start;
+
 
             // ** Create the feature for which G Code needs to be created
             ToolingFeature feature = null;
@@ -2942,8 +3100,8 @@ namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB {
             }
 
             if (!CreateDummyBlock4Master && usePingPongOption) {
-               Traces[(int)Head].Add (new (
-                   mToolPos[(int)Head],
+               Traces[BucketNumber].Add (new (
+                   mToolPos[BucketNumber],
                    toPointOffset,
                    endNormal,
                    endNormal,
@@ -2951,8 +3109,8 @@ namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB {
                    EMove.RapidPosition,
                    toolingName));
 
-               mToolPos[(int)Head] = toPointOffset;
-               mToolVec[(int)Head] = endNormal.Normalized ();
+               mToolPos[BucketNumber] = toPointOffset;
+               mToolVec[BucketNumber] = endNormal.Normalized ();
             }
          }
       }
@@ -3117,7 +3275,7 @@ namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB {
          }
 
          // Update the block cut length
-         blockCutLength += mToolPos[(int)Head].DistTo (fromPt);
+         blockCutLength += mToolPos[BucketNumber].DistTo (fromPt);
 
          // Update the previous plane type
          prevPlaneType = currPlaneType;
@@ -3240,10 +3398,10 @@ namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB {
                   mcCoordsPrevToolingEPRetractedSafeZ.Z, 0, Rapid, comment: "", machine: Machine, createDummyBlock4Master: CreateDummyBlock4Master);
 
             if (!CreateDummyBlock4Master) {
-               Traces[(int)Head].Add (new GCodeSeg (mToolPos[(int)Head], prevToolingEPRetractedSafeZ, mToolVec[(int)Head],
+               Traces[BucketNumber].Add (new GCodeSeg (mToolPos[BucketNumber], prevToolingEPRetractedSafeZ, mToolVec[BucketNumber],
                XForm4.mZAxis, EGCode.G0, EMove.Retract2SafeZ, prevToolingName));
-               mToolPos[(int)Head] = prevToolingEPRetractedSafeZ;
-               mToolVec[(int)Head] = XForm4.mZAxis;
+               mToolPos[BucketNumber] = prevToolingEPRetractedSafeZ;
+               mToolVec[BucketNumber] = XForm4.mZAxis;
             }
          }
 
@@ -3258,10 +3416,10 @@ namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB {
                mcCoordsCurrToolingSPRetractedSafeZ.Z, 0, machine: Machine, createDummyBlock4Master: CreateDummyBlock4Master);
 
             if (!CreateDummyBlock4Master) {
-               Traces[(int)Head].Add (new (mToolPos[(int)Head], currToolingSPRetractedSafeZ, mToolVec[(int)Head].Length.EQ (0) ? XForm4.mZAxis : mToolVec[(int)Head], XForm4.mZAxis, EGCode.G0,
+               Traces[BucketNumber].Add (new (mToolPos[BucketNumber], currToolingSPRetractedSafeZ, mToolVec[BucketNumber].Length.EQ (0) ? XForm4.mZAxis : mToolVec[BucketNumber], XForm4.mZAxis, EGCode.G0,
                EMove.SafeZ2SafeZ, currentToolingName));
-               mToolPos[(int)Head] = currToolingSPRetractedSafeZ;
-               mToolVec[(int)Head] = XForm4.mZAxis;
+               mToolPos[BucketNumber] = currToolingSPRetractedSafeZ;
+               mToolVec[BucketNumber] = XForm4.mZAxis;
             }
          }
       }
@@ -3345,7 +3503,7 @@ namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB {
       /// </summary>
       /// <returns>The last position of the tool head</returns>
       public Tuple<Point3, Vector3> GetLastToolHeadPosition () {
-         return new Tuple<Point3, Vector3> (mToolPos[(int)Head], mToolVec[(int)Head]);
+         return new Tuple<Point3, Vector3> (mToolPos[BucketNumber], mToolVec[BucketNumber]);
       }
 
       // Tuple<Start, End> Start inclusive and End exclusive

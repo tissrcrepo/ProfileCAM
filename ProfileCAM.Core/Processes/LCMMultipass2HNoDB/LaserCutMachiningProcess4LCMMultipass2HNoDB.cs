@@ -11,7 +11,7 @@ namespace ProfileCAM.Core.Processes.LCMMultipass2HNoDB {
    #nullable enable
    public class GenesysHub4GenesysHub4LCMMultipass2HNoDB : IGenesysHub {
       #region G Code Drawables and Utilities
-      List<List<GCodeSeg>> mTraces = [[], []];
+      List<List<GCodeSeg>> mTraces = [[], [], [], []];
       public List<List<GCodeSeg>> Traces { get => mTraces; }
       public List<List<GCodeSeg>[]> CutScopeTraces { get => mGCodeGenerator.CutScopeTraces; }
 

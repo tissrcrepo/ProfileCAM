@@ -681,7 +681,8 @@ namespace ProfileCAM.Core.GCodeGen.GCodeFeatures {
                      GCGen.WriteWireJointTrace (wjtTS, nextSeg: null, scrapSideNormal,
                            mMostRecentPrevToolPosition.Value, NotchApproachLength, ref mPrevPlane, flangeType, ToolingItem,
                            ref mBlockCutLength, mTotalToolingsCutLength, mXStart, mXPartition, mXEnd,
-                              isFlexCut: false, isValidNotch: false, flexRefTS: mFlexStartRef, out _, toCompleteToolingBlock: false, comment);
+                              isFlexCut: false, isValidNotch: false, flexRefTS: mFlexStartRef, out _, toCompleteToolingBlock: false, comment,
+                              relativeCoords: false, firstWJTTrace: true);
                   }
                   PreviousToolingSegment = new (mFlexStartRef.Value.Curve, PreviousToolingSegment.Value.Vec1, mFlexStartRef.Value.Vec0);
                   mMostRecentPrevToolPosition = GCGen.GetLastToolHeadPosition ().Item1;

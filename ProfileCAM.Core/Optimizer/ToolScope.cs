@@ -1,4 +1,7 @@
-﻿using Flux.API;
+﻿global using ToolScopeList = System.Collections.Generic.List<ProfileCAM.Core.Optimizer.ToolScope<ProfileCAM.Core.Tooling>>;
+global using ToolingList = System.Collections.Generic.List<ProfileCAM.Core.Tooling>;
+
+using Flux.API;
 using ProfileCAM.Core.Geometries;
 
 namespace ProfileCAM.Core.Optimizer;
@@ -75,7 +78,7 @@ public class ToolScope<T> where T : Tooling {
 
    
 
-   //public static double ScopeLength (List<ToolScope<Tooling>> tss) {
+   //public static double ScopeLength (ToolScopeList  tss) {
    //   return tss?.Sum (ts => ts.Length ?? 0.0) ?? 0.0;
    //}
 }

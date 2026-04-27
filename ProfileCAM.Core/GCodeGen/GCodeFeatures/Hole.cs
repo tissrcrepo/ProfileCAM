@@ -81,7 +81,7 @@ namespace ProfileCAM.Core.GCodeGen.GCodeFeatures {
       public override void WriteTooling () {
          GCGen.InitializeToolingBlock (ToolingItem, mPrevToolingItem, /*frameFeed,*/
                   mXStart, mXPartition, mXEnd, ToolingSegments, isValidNotch: false, isFlexCut: false,
-                  mIsLastToolingItem/*, isToBeTreatedAsCutOut: false*/, startIndex: -1, endIndex: -1, nextTs: null);
+                  mIsLastToolingItem/*, isToBeTreatedAsCutHolOut: false*/, startIndex: -1, endIndex: -1, nextTs: null);
          GCGen.RapidMoveToPiercingPositionWithPingPong = false;
          if (ToolingSegments == null || ToolingSegments?.Count == 0) return;
 
