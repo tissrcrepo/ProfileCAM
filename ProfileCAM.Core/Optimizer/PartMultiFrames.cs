@@ -598,8 +598,8 @@ public class PartMultiFrames {
          if (ii < 0 )
             break;
       }
-      
-      
+
+
       //if (ccFrames.Count != FrameHeaders.Count)
       //   throw new Exception ("ccFrames.Count != FrameHeaders.Count, serious error");
    }
@@ -640,10 +640,28 @@ public class PartMultiFrames {
       var prevPartRatio = GCodeGen.PartitionRatio;
       if (!GCodeGen.OptimizePartition) GCodeGen.PartitionRatio = 0.5;
       if (GCodeGen.Heads == MCSettings.EHeads.Left || GCodeGen.Heads == MCSettings.EHeads.Right) GCodeGen.PartitionRatio = 1.0;
+
+      // Set priorities of features
+      for (int ii = 0; ii < OptimalFrames.Count; ii++) {
+         if (!OptimalFrames[ii].HasValue)
+            throw new Exception ("One of the optimal frame is null");
+
+         var frame = OptimalFrames[ii].Value;
+
+         frame.FrameToolScopesH11 = Utils.GetToolingScopes4Head (frame.FrameToolScopesH11, 0, GCodeGen.GCodeGenSettings);
+         frame.FrameToolScopesH12 = Utils.GetToolingScopes4Head (frame.FrameToolScopesH12, 0, GCodeGen.GCodeGenSettings);
+         frame.FrameToolScopesH21 = Utils.GetToolingScopes4Head (frame.FrameToolScopesH21, 1, GCodeGen.GCodeGenSettings);
+         frame.FrameToolScopesH22 = Utils.GetToolingScopes4Head (frame.FrameToolScopesH22, 1, GCodeGen.GCodeGenSettings);
+
+         OptimalFrames[ii] = frame;
+      }
+
+
       GCodeGen.BlockNumber = 0;
       GCodeGen.GenerateGCode (IGCodeGenerator.ToolHeadType.Master, OptimalFrames);
+      var csTraces = GCodeGen.CutScopeTraces;
       GCodeGen.GenerateGCode (IGCodeGenerator.ToolHeadType.Slave, OptimalFrames);
-
+      csTraces = GCodeGen.CutScopeTraces;
       GCodeGen.BlockNumber = 0;
       FrameTraces = GCodeGen.FrameTraces;
       GCodeGen.PartitionRatio = prevPartRatio;

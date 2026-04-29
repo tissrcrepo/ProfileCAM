@@ -34,6 +34,11 @@ namespace ProfileCAM.Core.Optimizer {
       public ToolScopeList FrameToolScopesH12 { get; set; } = [];
       public ToolScopeList FrameToolScopesH21 { get; set; } = [];
       public ToolScopeList FrameToolScopesH22 { get; set; } = [];
+      public int FrameToolScopesH11Count { get => FrameToolScopesH11.Count; }
+      public int FrameToolScopesH12Count { get => FrameToolScopesH12.Count; }
+      public int FrameToolScopesH21Count { get => FrameToolScopesH21.Count; }
+      public int FrameToolScopesH22Count { get => FrameToolScopesH22.Count; }
+
       public List<Tooling> ToolingsH11 = [];
       public List<Tooling> ToolingsH12 = [];
       public List<Tooling> ToolingsH21 = [];
@@ -161,11 +166,15 @@ namespace ProfileCAM.Core.Optimizer {
          OffsetABCD ();
          CollectToolScopesInBuckets ();
          // Allocate Heads to tooling in toolscopes
-         AllocateHeadsToToolScopes (IGCodeGenerator.ToolHeadType.Infer);
+         //AllocateHeadsToToolScopes (IGCodeGenerator.ToolHeadType.Infer);
          CheckToolScopesIXNAtXPositions ();
          CheckCountConsistency ();
          CheckMinFLConsistency ();
-         AllocateHeads2Toolings ();
+
+         ToolingsH11 = [.. FrameToolScopesH11.Select (ts => ts.Tooling)];
+         ToolingsH12 = [.. FrameToolScopesH12.Select (ts => ts.Tooling)];
+         ToolingsH21 = [.. FrameToolScopesH21.Select (ts => ts.Tooling)];
+         ToolingsH22 = [.. FrameToolScopesH22.Select (ts => ts.Tooling)];
 
 
          //if (FrameToolScopesH11.Count > 0 && FrameToolScopesH12.Count > 0 && FrameToolScopesH21.Count > 0 && FrameToolScopesH22.Count > 0) {
@@ -253,22 +262,7 @@ namespace ProfileCAM.Core.Optimizer {
 
          return (rapidPosTime, mcTime);
       }
-
-      void AllocateHeads2Toolings () {
-         // Sort tooling as per user settings
-         if (mGcGen == null)
-            throw new Exception ("G Code generator not set");
-         FrameToolScopesH11 = Utils.GetToolingScopes4Head (FrameToolScopesH11, 0, mGcGen.GCodeGenSettings);
-         FrameToolScopesH12 = Utils.GetToolingScopes4Head (FrameToolScopesH12, 0, mGcGen.GCodeGenSettings);
-         FrameToolScopesH21 = Utils.GetToolingScopes4Head (FrameToolScopesH21, 1, mGcGen.GCodeGenSettings);
-         FrameToolScopesH22 = Utils.GetToolingScopes4Head (FrameToolScopesH22, 1, mGcGen.GCodeGenSettings);
-
-         ToolingsH11 = [.. FrameToolScopesH11.Select (ts => ts.Tooling)];
-         ToolingsH12 = [.. FrameToolScopesH12.Select (ts => ts.Tooling)];
-         ToolingsH21 = [.. FrameToolScopesH21.Select (ts => ts.Tooling)];
-         ToolingsH22 = [.. FrameToolScopesH22.Select (ts => ts.Tooling)];
-      }
-
+      
       public ToolScopeList Bucket11ToolScopes { get => FrameToolScopesH11; }
       public ToolScopeList Bucket12ToolScopes { get => FrameToolScopesH12; }
       public ToolScopeList Bucket21ToolScopes { get => FrameToolScopesH21; }
@@ -379,7 +373,7 @@ namespace ProfileCAM.Core.Optimizer {
 
             if (ixnTSSAtFrameCenter.Count > 0) {
                needToLeftOffset = true;
-               var ixnTSSAtFrameCenterBounds = Utils.GetScope (ixnTSSAtFrameCenter);
+               var ixnTSSAtFrameCenterBounds = Utils.GetScopeXExtents (ixnTSSAtFrameCenter);
                if (ixnTSSAtFrameCenterBounds != null)
                   leftOffset = -(b1 - ixnTSSAtFrameCenterBounds.Value.MinStartX);
                if (leftOffset > 30.0)
@@ -397,7 +391,7 @@ namespace ProfileCAM.Core.Optimizer {
 
             if (ixnTSSAtFrameCenter.Count > 0) {
                needToRightOffset = true;
-               var ixnTSSAtFrameCenterBounds = Utils.GetScope (ixnTSSAtFrameCenter);
+               var ixnTSSAtFrameCenterBounds = Utils.GetScopeXExtents (ixnTSSAtFrameCenter);
                if (ixnTSSAtFrameCenterBounds != null)
                   //leftSideGap = B - ixnTSSAtFrameCenterBounds.Value.MinStartX;
                   rightOffset = ixnTSSAtFrameCenterBounds.Value.MaxEndX - b2;
@@ -528,6 +522,10 @@ namespace ProfileCAM.Core.Optimizer {
          }
 
 
+         if (FrameToolScopesH11Count == 1 && FrameToolScopesH12Count == 42 && FrameToolScopesH21Count == 36 && FrameToolScopesH22Count == 1) {
+            int aa = 0;
+            ++aa;
+         }
          
       }
 

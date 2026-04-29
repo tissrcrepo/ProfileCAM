@@ -1550,14 +1550,16 @@ public static class Utils {
    }
 
    public static Bound3 CalculateBound3 (ToolScopeList tssList) {
+      if (tssList.Count == 0) return Bound3.Empty;
       var cuts = tssList.Select (ts => ts.Tooling).ToList ();
-      var bounds = cuts.SelectMany (cut => new[] { cut.Bound3 });
-      return new Bound3 (bounds.Min (b => b.XMin),
-                         bounds.Min (b => b.YMin),
-                         bounds.Min (b => b.ZMin),
-                         bounds.Max (b => b.XMax),
-                         bounds.Max (b => b.YMax),
-                         bounds.Max (b => b.ZMax));
+      return CalculateBound3 (cuts);
+      //var bounds = cuts.SelectMany (cut => new[] { cut.Bound3 });
+      //return new Bound3 (bounds.Min (b => b.XMin),
+      //                   bounds.Min (b => b.YMin),
+      //                   bounds.Min (b => b.ZMin),
+      //                   bounds.Max (b => b.XMax),
+      //                   bounds.Max (b => b.YMax),
+      //                   bounds.Max (b => b.ZMax));
    }
 
    public static Bound3 CalculateBound3 (Frame frame, IGCodeGenerator.ToolHeadType headType) {
@@ -2260,6 +2262,8 @@ public static class Utils {
          PartMultiFrames partMultiFrames = new (gcodeGen, MinFL, tol);
          partMultiFrames.Optimize ();
          var optimalFrames = partMultiFrames.OptimalFrames;
+         var penaltyTime = optimalFrames.Sum (off => off.Value.TotalProcessTime);
+         var waitTime = optimalFrames.Sum (off => off.Value.WaitTime);
          if (optimalFrames != null)
             foreach (var optFRame in optimalFrames)
                if (optFRame.HasValue)
@@ -2744,32 +2748,29 @@ public static class Utils {
    public static ToolScopeList GetToolingScopes4Head (ToolScopeList tss, int headNo, MCSettings mcs) {
       // New priorities are set as per task FCH-35
       ToolScopeList res, holes = [];
-
-      // Get Tooling list 
-      //var cuts = tss.Select (ts => ts.Tooling).ToList ();
-
-      holes = [.. tss.Where (cut => cut.Tooling.Head == headNo && cut.Tooling.Kind == EKind.Hole)];
+      
+      holes = [.. tss.Where (ts => ts.Tooling.Head == headNo && ts.Tooling.Kind == EKind.Hole)];
 
       // Set priority by flange on which the features are present in flangeCutPriority
-      holes = [..holes.OrderBy (cut => Array.IndexOf (sFlangeCutPriority, Utils.GetFlangeType (cut.Tooling,mcs.PartConfig==PartConfigType.LHComponent?sXformLHInv:sXformRHInv)))
+      holes = [..holes.OrderBy (ts => Array.IndexOf (sFlangeCutPriority, Utils.GetFlangeType (ts.Tooling,mcs.PartConfig==PartConfigType.LHComponent?sXformLHInv:sXformRHInv)))
       //.ThenBy (cut => MCSettings.It.ToolingPriority.ToList().IndexOf (cut.Kind))
-      .ThenBy (cut => cut.Tooling.Start.Pt.X)];
+      .ThenBy (ts => ts.Tooling.Start.Pt.X)];
 
       // Collect CutOuts, then order by by flange priority ( flangeCutPriority ),  then by ascending order of X
-      var cutouts = (tss.Where (cut => cut.Tooling.Kind == EKind.Cutout && cut.Tooling.Head == headNo));
-      cutouts = [..cutouts.OrderBy (cut => Array.IndexOf (sFlangeCutPriority, Utils.GetFlangeType (cut.Tooling,mcs.PartConfig==PartConfigType.LHComponent?sXformLHInv:sXformRHInv)))
+      var cutouts = (tss.Where (ts => ts.Tooling.Kind == EKind.Cutout && ts.Tooling.Head == headNo));
+      cutouts = [..cutouts.OrderBy (ts => Array.IndexOf (sFlangeCutPriority, Utils.GetFlangeType (ts.Tooling,mcs.PartConfig==PartConfigType.LHComponent?sXformLHInv:sXformRHInv)))
       //.ThenBy (cut => MCSettings.It.ToolingPriority.ToList().IndexOf (cut.Kind))
-      .ThenBy (cut => cut.Tooling.Start.Pt.X)];
+      .ThenBy (ts => ts.Tooling.Start.Pt.X)];
 
       // Collect single plane notches, then order by flange priority ( flangeCutPriority ),  then by ascending order of X
-      var singlePlaneNotches = tss.Where (cut => cut.Tooling.Kind == EKind.Notch && cut.Tooling.Head == headNo && cut.Tooling.IsSingleFlangeTooling ());
-      singlePlaneNotches = [..singlePlaneNotches.OrderBy (cut => Array.IndexOf (sFlangeCutPriority, Utils.GetFlangeType (cut.Tooling,mcs.PartConfig==PartConfigType.LHComponent?sXformLHInv:sXformRHInv)))
-      .ThenBy (cut => cut.Tooling.Start.Pt.X)];
+      var singlePlaneNotches = tss.Where (ts => ts.Tooling.Kind == EKind.Notch && ts.Tooling.Head == headNo && ts.Tooling.IsSingleFlangeTooling ());
+      singlePlaneNotches = [..singlePlaneNotches.OrderBy (ts => Array.IndexOf (sFlangeCutPriority, Utils.GetFlangeType (ts.Tooling,mcs.PartConfig==PartConfigType.LHComponent?sXformLHInv:sXformRHInv)))
+      .ThenBy (ts => ts.Tooling.Start.Pt.X)];
 
       // Collect dual plane notches , then order by flange priority ( flangeCutPriority ),  then by ascending order of X
-      var dualPlaneNotches = tss.Where (cut => cut.Tooling.Kind == EKind.Notch && cut.Tooling.Head == headNo && cut.Tooling.IsDualFlangeTooling ());
-      dualPlaneNotches = [..dualPlaneNotches.OrderBy (cut => Array.IndexOf (sFlangeCutPriority, Utils.GetFlangeType (cut.Tooling,mcs.PartConfig==PartConfigType.LHComponent?sXformLHInv:sXformRHInv)))
-      .ThenBy (cut => cut.Tooling.Start.Pt.X)];
+      var dualPlaneNotches = tss.Where (ts => ts.Tooling.Kind == EKind.Notch && ts.Tooling.Head == headNo && ts.Tooling.IsDualFlangeTooling ());
+      dualPlaneNotches = [..dualPlaneNotches.OrderBy (ts => Array.IndexOf (sFlangeCutPriority, Utils.GetFlangeType (ts.Tooling,mcs.PartConfig==PartConfigType.LHComponent?sXformLHInv:sXformRHInv)))
+      .ThenBy (ts => ts.Tooling.Start.Pt.X)];
 
       // Concat all
       res = [.. holes, .. cutouts, .. singlePlaneNotches, .. dualPlaneNotches];
@@ -2784,7 +2785,7 @@ public static class Utils {
       return false;
    }
 
-   public static (double MinStartX, double MaxEndX)? GetScope (
+   public static (double MinStartX, double MaxEndX)? GetScopeXExtents (
         ToolScopeList toolScopes) {
       ArgumentNullException.ThrowIfNull (toolScopes);
 
@@ -3062,5 +3063,14 @@ public static class Utils {
       if (valChanged)
          return (minStartX, maxEndX);
       else return (null, null);
+   }
+
+   public static Bound3 GetBound(ToolScopeList tsList) {
+      Bound3 bound = Bound3.Empty;
+      foreach( var ts in tsList) {
+         foreach( var seg in ts.Tooling.Segs)
+            bound += seg.GetBound ();
+      }
+      return bound;
    }
 }

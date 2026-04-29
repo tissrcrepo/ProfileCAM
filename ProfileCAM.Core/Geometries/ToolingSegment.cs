@@ -63,7 +63,13 @@ public struct ToolingSegment {
       vec0 = this.Vec0;
       vec1 = this.Vec1;
    }
-
+   public readonly Bound3 GetBound () {
+      if ( Curve is FCArc3 fcArc)
+         return fcArc.Bounds;
+      else if ( Curve is FCLine3 line )
+         return line.Bounds;
+      return Bound3.Empty;
+   }
    public FCCurve3 Curve { readonly get => mCurve; set => mCurve = value; }
    public Vector3 Vec0 { readonly get => mVec0; set => mVec0 = value; }
    public Vector3 Vec1 { readonly get => mVec1; set => mVec1 = value; }
