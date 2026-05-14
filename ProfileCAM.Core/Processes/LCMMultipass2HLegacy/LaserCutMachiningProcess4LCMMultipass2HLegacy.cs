@@ -3,6 +3,7 @@ using ProfileCAM.Core.Tools;
 using Flux.API;
 using ProfileCAM.Core.GCodeGen.LCMMultipass2HLegacy;
 using ProfileCAM.Core.GCodeGen;
+using ProfileCAM.Core.Optimizer;
 
 namespace ProfileCAM.Core.Processes.LCMMultipass2HLegacy {
    /// <summary>GenesysHub is used to generate G-Code, and the Traces for simulation</summary>
@@ -12,7 +13,6 @@ namespace ProfileCAM.Core.Processes.LCMMultipass2HLegacy {
       List<List<GCodeSeg>> mTraces = [[], []];
       public List<List<GCodeSeg>> Traces { get => mTraces; }
       public List<List<GCodeSeg>[]> CutScopeTraces { get => mGCodeGenerator.CutScopeTraces; }
-
       public void ClearTraces () {
          mTraces[0]?.Clear ();
          mTraces[1]?.Clear ();
@@ -100,7 +100,13 @@ namespace ProfileCAM.Core.Processes.LCMMultipass2HLegacy {
       //public void ComputeGCode (bool testing = false, double ratio = 0.5) {
       public void ComputeGCode (bool testing /*= false*/) {
          ClearZombies ();
-         mTraces = Utils.ComputeGCode (mGCodeGenerator, testing);
+         if (mGCodeGenerator.GCodeGenSettings.Machine == MachineType.LCMMultipass2H)
+            (mTraces, _) = Utils.ComputeGCode_LCMMultipass2H (mGCodeGenerator, testing);
+         else if (mGCodeGenerator.GCodeGenSettings.Machine == MachineType.LCMLegacy)
+            mTraces = Utils.ComputeGCode_SinglePassLegacy (mGCodeGenerator, testing);
+         else
+            throw new Exception ("Unknown machine. Not supported");
+         // TODO Legacy
       }
       #endregion
    }

@@ -473,7 +473,9 @@ public class PartMultiFrames {
 
       //. Iterate through all the candidate frames to find which the optimal frame is
       int ii = 0;
+      bool nextScope;
       while(true) {
+         nextScope = true;
          optimalFrame = null;
          
          double totalTime = double.MaxValue;
@@ -545,10 +547,20 @@ public class PartMultiFrames {
             if (frame != null) {
                var mcStatus = frame.Value.MachinableStatus;
                if (mcStatus == FrameMachinableStatus.Machinable) {
-                  if (totalTime > frame.Value.TotalMachiningTime) {
+                  if (totalTime > frame.Value.TotalProcessTime) {
                      optimalFrame = frame.Value;
-                     totalTime = frame.Value.TotalMachiningTime;
+                     totalTime = frame.Value.TotalProcessTime;
                      if (optimalFrame != null) {
+                        if (nextScope == false) {
+                           if (OptimalFrames.Count > 0)
+                              OptimalFrames.RemoveAt (OptimalFrames.Count - 1);
+                        }
+                        nextScope = false;
+                        var totalProcessTimw = optimalFrame.Value.TotalProcessTime;
+                        var bucket11 = optimalFrame.Value.FrameToolScopesH11;
+                        var bucket12 = optimalFrame.Value.FrameToolScopesH12;
+                        var bucket21 = optimalFrame.Value.FrameToolScopesH21;
+                        var bucket22 = optimalFrame.Value.FrameToolScopesH22;
                         OptimalFrames.Add (optimalFrame);
                         optimalFrameFound = true;
                         if (optimalFrame.Value.FinishPositionHead1.HasValue)
@@ -592,13 +604,28 @@ public class PartMultiFrames {
             MarkProcessed (OptimalFrames);
          int stix = ii;
          // Find the index of the first unprocessed ToolScope in ToolScopesBySxList
+         //prev_ii = ii;
          ii = ToolScopesBySxList.FindIndex (ts => !ts.IsProcessed);
+         
          //if (ii < 0) break;
          //var vall = CandidateFrames1[(stix, ii-1)];
          if (ii < 0 )
             break;
       }
+      //// Set priorities of features
+      //for (ii = 0; ii < OptimalFrames.Count; ii++) {
+      //   if (!OptimalFrames[ii].HasValue)
+      //      throw new Exception ("One of the optimal frame is null");
 
+      //   var frame = OptimalFrames[ii].Value;
+
+      //   frame.FrameToolScopesH11 = Utils.GetToolingScopes4Head (frame.FrameToolScopesH11, 0, GCodeGen.GCodeGenSettings);
+      //   frame.FrameToolScopesH12 = Utils.GetToolingScopes4Head (frame.FrameToolScopesH12, 0, GCodeGen.GCodeGenSettings);
+      //   frame.FrameToolScopesH21 = Utils.GetToolingScopes4Head (frame.FrameToolScopesH21, 1, GCodeGen.GCodeGenSettings);
+      //   frame.FrameToolScopesH22 = Utils.GetToolingScopes4Head (frame.FrameToolScopesH22, 1, GCodeGen.GCodeGenSettings);
+
+      //   OptimalFrames[ii] = frame;
+      //}
 
       //if (ccFrames.Count != FrameHeaders.Count)
       //   throw new Exception ("ccFrames.Count != FrameHeaders.Count, serious error");
@@ -641,22 +668,7 @@ public class PartMultiFrames {
       if (!GCodeGen.OptimizePartition) GCodeGen.PartitionRatio = 0.5;
       if (GCodeGen.Heads == MCSettings.EHeads.Left || GCodeGen.Heads == MCSettings.EHeads.Right) GCodeGen.PartitionRatio = 1.0;
 
-      // Set priorities of features
-      for (int ii = 0; ii < OptimalFrames.Count; ii++) {
-         if (!OptimalFrames[ii].HasValue)
-            throw new Exception ("One of the optimal frame is null");
-
-         var frame = OptimalFrames[ii].Value;
-
-         frame.FrameToolScopesH11 = Utils.GetToolingScopes4Head (frame.FrameToolScopesH11, 0, GCodeGen.GCodeGenSettings);
-         frame.FrameToolScopesH12 = Utils.GetToolingScopes4Head (frame.FrameToolScopesH12, 0, GCodeGen.GCodeGenSettings);
-         frame.FrameToolScopesH21 = Utils.GetToolingScopes4Head (frame.FrameToolScopesH21, 1, GCodeGen.GCodeGenSettings);
-         frame.FrameToolScopesH22 = Utils.GetToolingScopes4Head (frame.FrameToolScopesH22, 1, GCodeGen.GCodeGenSettings);
-
-         OptimalFrames[ii] = frame;
-      }
-
-
+      
       GCodeGen.BlockNumber = 0;
       GCodeGen.GenerateGCode (IGCodeGenerator.ToolHeadType.Master, OptimalFrames);
       var csTraces = GCodeGen.CutScopeTraces;

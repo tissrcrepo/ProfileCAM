@@ -39,10 +39,11 @@ namespace ProfileCAM.Core.Optimizer {
       public int FrameToolScopesH21Count { get => FrameToolScopesH21.Count; }
       public int FrameToolScopesH22Count { get => FrameToolScopesH22.Count; }
 
-      public List<Tooling> ToolingsH11 = [];
-      public List<Tooling> ToolingsH12 = [];
-      public List<Tooling> ToolingsH21 = [];
-      public List<Tooling> ToolingsH22 = [];
+      public readonly List<Tooling> ToolingsH11 => [.. FrameToolScopesH11.Select (ts => ts.Tooling)];
+      public readonly List<Tooling> ToolingsH12 => [.. FrameToolScopesH12.Select (ts => ts.Tooling)];
+      public readonly List<Tooling> ToolingsH21 => [.. FrameToolScopesH21.Select (ts => ts.Tooling)];
+      public readonly List<Tooling> ToolingsH22 => [.. FrameToolScopesH22.Select (ts => ts.Tooling)];
+      
       public readonly PointVec? FinishPositionHead1 => Utils.GetEndPos (FrameToolScopesH12);
       public readonly PointVec? FinishPositionHead2 => Utils.GetEndPos (FrameToolScopesH22);
 
@@ -80,7 +81,7 @@ namespace ProfileCAM.Core.Optimizer {
       PointVec? mPrevFrameFinishPosH2;
       Bound3 mPartBound;
       public double Tol { get; set; } = 1e-6;
-      double A, B, C;
+      public double A, B, C;
       public bool IsLastPass { get; private set; }
       public bool IsSingleHeadJob { get; private set; } = false;
       public Frame () { }
@@ -112,6 +113,8 @@ namespace ProfileCAM.Core.Optimizer {
          bool isLastFrame = partLastToolScopeEx.EQ (frameLastToolScopeEx);
 
          mGcGen = gcGen;
+         if (mGcGen == null)
+            throw new Exception ("G Code generator is not set");
          Tol = tol;
          mPrevFrameFinishPosH1 = prevFrameFinishPosH1;
          mPrevFrameFinishPosH2 = prevFrameFinishPosH2;
@@ -171,10 +174,10 @@ namespace ProfileCAM.Core.Optimizer {
          CheckCountConsistency ();
          CheckMinFLConsistency ();
 
-         ToolingsH11 = [.. FrameToolScopesH11.Select (ts => ts.Tooling)];
-         ToolingsH12 = [.. FrameToolScopesH12.Select (ts => ts.Tooling)];
-         ToolingsH21 = [.. FrameToolScopesH21.Select (ts => ts.Tooling)];
-         ToolingsH22 = [.. FrameToolScopesH22.Select (ts => ts.Tooling)];
+         //ToolingsH11 = [.. FrameToolScopesH11.Select (ts => ts.Tooling)];
+         //ToolingsH12 = [.. FrameToolScopesH12.Select (ts => ts.Tooling)];
+         //ToolingsH21 = [.. FrameToolScopesH21.Select (ts => ts.Tooling)];
+         //ToolingsH22 = [.. FrameToolScopesH22.Select (ts => ts.Tooling)];
 
 
          //if (FrameToolScopesH11.Count > 0 && FrameToolScopesH12.Count > 0 && FrameToolScopesH21.Count > 0 && FrameToolScopesH22.Count > 0) {
@@ -184,7 +187,25 @@ namespace ProfileCAM.Core.Optimizer {
          FindMachinableStatus ();
          if (MachinableStatus != FrameMachinableStatus.Machinable)
             return;
+         AllocateHeadsToToolScopes (ToolHeadType.Infer);
+         SetPrioriesToFeatures ();
          ComputeProcessingTimes (waitTimeSclaFactor: 10.0);
+      }
+      public void SetPrioriesToFeatures () {
+         // Set priorities of features
+         //var f1 = FrameToolScopesH11.Find (ts => ts.Tooling.Flange == Utils.EFlange.Bottom);
+         //var f2 = FrameToolScopesH12.Find (ts => ts.Tooling.Flange == Utils.EFlange.Bottom);
+         //var f3 = FrameToolScopesH21.Find (ts => ts.Tooling.Flange == Utils.EFlange.Bottom);
+         //var f4 = FrameToolScopesH22.Find (ts => ts.Tooling.Flange == Utils.EFlange.Bottom);
+         //if ( f1 != null || f2 != null ||f3 != null || f4 != null) {
+         //   int aa = 0;
+         //   aa++;
+         //}
+
+         FrameToolScopesH11 = Utils.SetPrioriesToFeatures (FrameToolScopesH11, 0, mGcGen!.GCodeGenSettings);
+         FrameToolScopesH12 = Utils.SetPrioriesToFeatures (FrameToolScopesH12, 0, mGcGen!.GCodeGenSettings);
+         FrameToolScopesH21 = Utils.SetPrioriesToFeatures (FrameToolScopesH21, 1, mGcGen!.GCodeGenSettings);
+         FrameToolScopesH22 = Utils.SetPrioriesToFeatures (FrameToolScopesH22, 1, mGcGen!.GCodeGenSettings);
       }
 
       void ComputeProcessingTimes (double waitTimeSclaFactor, bool isLastFrame = false) {
@@ -202,9 +223,9 @@ namespace ProfileCAM.Core.Optimizer {
          MachiningTimeH2 = mcTimeH21 + mcTimeH22;
 
          TotalRapidPosTime = RapidPosTimeH2 + RapidPosTimeH1;
-         WaitTime = MachiningTimeH1 - MachiningTimeH2;
+         WaitTime = Math.Abs (mcTimeH11 - mcTimeH21) + Math.Abs (mcTimeH12 - mcTimeH22);
          if (isLastFrame) waitTimeSclaFactor = 1;
-         var ScaledWaitTime = Math.Abs (MachiningTimeH1 - MachiningTimeH2) * waitTimeSclaFactor; // Scale factor for waiting time
+         var ScaledWaitTime = WaitTime * waitTimeSclaFactor; // Scale factor for waiting time
          TotalMachiningTime = MachiningTimeH1 + MachiningTimeH2;
          TotalProcessTime = TotalMachiningTime + ScaledWaitTime + TotalRapidPosTime;
       }

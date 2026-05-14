@@ -97,7 +97,13 @@ namespace ProfileCAM.Core {
                GenesysHub.Workpiece.DoSorting ();
 
                // Compute G Code
-               Utils.ComputeGCode (GCodeGen, testing: true);
+               //Utils.ComputeGCode (GCodeGen, testing: true);
+               if (MCSettings.It.Machine == MachineType.LCMMultipass2HNoDB)
+                  Utils.ComputeGCode_LCMMultipass2H (GCodeGen, testing: true);
+               else if (MCSettings.It.Machine == MachineType.LCMLegacy)
+                  Utils.ComputeGCode_SinglePassLegacy (GCodeGen, testing: true);
+               else if (MCSettings.It.Machine == MachineType.LCMMultipass2HNoDB)
+                  Utils.ComputeGCode_LCMMultipass2HNoDB (GCodeGen, testing: true);
                var headData = ((GCodeGen.DINFileNameHead1, GCodeGen.DINFileNameHead2));
                DINFiles[idx] = headData;
                var diff = Diff (baselineDir, idx, launchWinmerge: false);

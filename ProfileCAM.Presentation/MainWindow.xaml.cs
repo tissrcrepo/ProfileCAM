@@ -535,6 +535,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged {
       mSetDlg = new (MCSettings.It);
       mSetDlg.OnOkAction += () => { if (mSetDlg.IsModified) SaveSettings (); };
       mSetDlg.ShowDialog ();
+      if (GenesysHub != null)
+         CreateGenesysHub ();
    }
 
    void OnAboutClick (object sender, RoutedEventArgs e) {
@@ -545,7 +547,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged {
       aboutWindow.ShowDialog ();
    }
 
-   void OnWindowLoaded (object sender, RoutedEventArgs e) {
+   void OnWindowLoaded (object sender, RoutedEventArgs e) => CreateGenesysHub ();
+   
+
+   void CreateGenesysHub () {
       if (MCSettings.It.Machine == MachineType.LCMMultipass2H)
          GenesysHub = new GenesysHub4LCMMultipass2HLegacy ();
       else if (MCSettings.It.Machine == MachineType.LCMMultipass2HNoDB)
@@ -553,6 +558,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged {
       if (mGHub == null)
          throw new Exception ("Machine is not supported");
       mProcessSimulator = new (mGHub, this.Dispatcher);
+      // Unsubscribe
+      mProcessSimulator.TriggerRedraw -= TriggerRedraw;
+      // Subscribe (always do this)
       mProcessSimulator.TriggerRedraw += TriggerRedraw;
       mProcessSimulator.SetSimulationStatus += status => SimulationStatus = status;
       //mProcessSimulator.zoomExtentsWithBound3Delegate += bound => Dispatcher.Invoke (() => ZoomWithExtents (bound));

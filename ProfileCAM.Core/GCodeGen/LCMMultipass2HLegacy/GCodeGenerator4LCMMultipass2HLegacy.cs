@@ -36,7 +36,7 @@ namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HLegacy {
 
       #region GCode Generator Properties
       //List<GCodeSeg>[] Traces = [[], []];
-      public List<GCodeSeg>[] Traces { get; set; }
+      public List<GCodeSeg>[] Traces { get; set; } = [[], []];
       IGenesysHub mGHub;
       List<List<GCodeSeg>[]> mCutScopeTraces = [];
       public List<List<GCodeSeg>[]> CutScopeTraces => mCutScopeTraces;
@@ -1026,7 +1026,7 @@ else                if (tooling.End.Pt.X < xf)
          mCutscopeToolingLengths = [];
          Head = head;
          CreateDummyBlock4Master = false;
-
+         BucketNumber = head == ToolHeadType.Master ? 0 : 1;
          if (Process == null || Process.Workpiece == null)
             throw new Exception ("Process or Workpiece is not set");
          string ncName = BuildDINFileName (Process.Workpiece.NCFileName, (int)head, PartConfigType, DinFilenameSuffix);

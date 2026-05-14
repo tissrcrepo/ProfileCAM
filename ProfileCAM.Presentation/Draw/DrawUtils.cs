@@ -5,11 +5,12 @@ using ProfileCAM.Core.Geometries;
 using ProfileCAM.Core.Tools;
 using Flux.API;
 using ProfileCAM.Core.Processes;
+using ProfileCAM.Core.GCodeGen;
 
 
 namespace ProfileCAM.Presentation.Draw {
    using ToolConfigSpec = (XForm4 XForm, Point3 WayPt, EMove MoveType);
-   public class ProcessSimulator (IGenesysHub gHub, Dispatcher dsp) : INotifyPropertyChanged {
+   public class ProcessSimulator : INotifyPropertyChanged {
       #region Enums
       public enum RefCSys {
          WCS,
@@ -31,11 +32,21 @@ namespace ProfileCAM.Presentation.Draw {
          public int gCodeSegIndex, wayPointIndex;
          //RefCSys mReferenceCS = RefCSys.WCS;
       }
+      public ProcessSimulator (IGenesysHub gHub, Dispatcher dsp) {
+         GenesysHub = gHub;
+         Dispatch = dsp;
+         // Clean, readable, and concise
+         (mLeftHeadBucketNumber, mRightHeadBucketNumber) = MCSettings.It.Machine switch {
+            MachineType.LCMMultipass2H or MachineType.LCMLegacy => (0, 1),
+            MachineType.LCMMultipass2HNoDB => (0, 2),
+            _ => (0, 0) // Default case - handles null or other values
+         };
+      }
       GCodeSegmentIndices[] mNextXFormIndex = [new (), new ()];
       double mPrevStepLen;
       int mCutScopeIndex = 0;
-      int mLeftHeadBucketNumber = 0;
-      int mRightHeadBucketNumber = 0;
+      int mLeftHeadBucketNumber;
+      int mRightHeadBucketNumber;
       private readonly object mCutScopeLockObject = new ();
       private readonly object mLeftHeadBucketNumberLockObject = new ();
       private readonly object mRightHeadBucketNumberLockObject = new ();
@@ -58,8 +69,8 @@ namespace ProfileCAM.Presentation.Draw {
       #endregion
 
       #region External Refs
-      public IGenesysHub GenesysHub { get; set; } = gHub;
-      public Dispatcher Dispatch { get; set; } = dsp;
+      public IGenesysHub GenesysHub { get; set; }
+      public Dispatcher Dispatch { get; set; }
       //public List<List<GCodeSeg>[]> CutScopeTraces { get => GenesysHub.GCodeGen.CutScopeTraces; }
       #endregion
 
@@ -98,6 +109,10 @@ namespace ProfileCAM.Presentation.Draw {
       public void ClearTraces () {
          GenesysHub.Traces[0]?.Clear ();
          GenesysHub.Traces[1]?.Clear ();
+         if ( MCSettings.It.Machine == MachineType.LCMMultipass2HNoDB) {
+            GenesysHub.Traces[2]?.Clear ();
+            GenesysHub.Traces[3]?.Clear ();
+         }
          GenesysHub.CutScopeTraces?.Clear ();
       }
 
@@ -116,9 +131,9 @@ namespace ProfileCAM.Presentation.Draw {
          int steps = (int)(GenesysHub.Traces[buckNo][mNextXFormIndex[(int)head].gCodeSegIndex].Length / MCSettings.It.StepLength);
 
          if (mNextXFormIndex[(int)head].wayPointIndex == 0) {
-            if (GenesysHub.Traces[buckNo][mNextXFormIndex[(int)head].gCodeSegIndex].GCode is EGCode.G0 or EGCode.G1) 
+            if (GenesysHub.Traces[buckNo][mNextXFormIndex[(int)head].gCodeSegIndex].GCode is EGCode.G0 or EGCode.G1)
                mWayPoints[(int)head] = Utils.DiscretizeLine (GenesysHub.Traces[buckNo][mNextXFormIndex[(int)head].gCodeSegIndex], steps);
-            else if (GenesysHub.Traces[buckNo][mNextXFormIndex[(int)head].gCodeSegIndex].GCode is EGCode.G2 or EGCode.G3) 
+            else if (GenesysHub.Traces[buckNo][mNextXFormIndex[(int)head].gCodeSegIndex].GCode is EGCode.G2 or EGCode.G3)
                mWayPoints[(int)head] = Utils.DiscretizeArc (GenesysHub.Traces[buckNo][mNextXFormIndex[(int)head].gCodeSegIndex], steps);
          }
 
@@ -148,17 +163,23 @@ namespace ProfileCAM.Presentation.Draw {
          mWayPoints = new List<Tuple<Point3, Vector3>>[2];
          SetCutScopeIndex (0);
          SetLeftHeadBucketNumber (0);
-         SetRightHeadBucketNumber (2);
+         if (MCSettings.It.Machine == MachineType.LCMMultipass2HNoDB)
+            SetRightHeadBucketNumber (2);
+         else if (MCSettings.It.Machine == MachineType.LCMMultipass2H ||
+            MCSettings.It.Machine == MachineType.LCMLegacy)
+            SetRightHeadBucketNumber (1);
          if (GenesysHub.CutScopeTraces.Count > 0) {
-            GenesysHub.Traces[0] = GenesysHub.CutScopeTraces[GetCutScopeIndex ()][0]; // Head 1 Bucket 11
-            GenesysHub.Traces[1] = GenesysHub.CutScopeTraces[GetCutScopeIndex ()][1]; // Head 1 Bucket 12
-            GenesysHub.Traces[2] = GenesysHub.CutScopeTraces[GetCutScopeIndex ()][2]; // Head 1 Bucket 21
-            GenesysHub.Traces[3] = GenesysHub.CutScopeTraces[GetCutScopeIndex ()][3]; // Head 1 Bucket 22
+            GenesysHub.Traces[0] = GenesysHub.CutScopeTraces[GetCutScopeIndex ()][0]; // Head 1 Bucket 11 OR Master Head for Legacy 2H
+            GenesysHub.Traces[1] = GenesysHub.CutScopeTraces[GetCutScopeIndex ()][1]; // Head 1 Bucket 12 OR Slave Head for Legacy 2H
+            if (MCSettings.It.Machine == MachineType.LCMMultipass2HNoDB) {
+               GenesysHub.Traces[2] = GenesysHub.CutScopeTraces[GetCutScopeIndex ()][2]; // Head 1 Bucket 21
+               GenesysHub.Traces[3] = GenesysHub.CutScopeTraces[GetCutScopeIndex ()][3]; // Head 1 Bucket 22
+            }
          }
       }
 
       void DrawToolSim (ProfileCAM.Core.MCSettings.EHeads head) {
-         
+
          var mcCss = GenesysHub.GCodeGen.CutScopeTraces;
          //Bound3 bound = new ();
 
@@ -184,13 +205,17 @@ namespace ProfileCAM.Presentation.Draw {
                // If Multipass
                if (GenesysHub.CutScopeTraces.Count > 1 && GetCutScopeIndex () + 1 < GenesysHub.CutScopeTraces.Count) {
                   // Safe incrementor
-                  IncrementLeftHeadBucketNumber ();
-                  IncrementRightHeadBucketNumber ();
-                  if ( GetLeftHeadBucketNumber () >= 2)
-                     SetLeftHeadBucketNumber (0);
-                  if (GetRightHeadBucketNumber () >= 4)
-                     SetRightHeadBucketNumber (2);
-
+                  if (MCSettings.It.Machine == MachineType.LCMMultipass2HNoDB) {
+                     IncrementLeftHeadBucketNumber ();
+                     IncrementRightHeadBucketNumber ();
+                     if (GetLeftHeadBucketNumber () >= 2)
+                        SetLeftHeadBucketNumber (0);
+                     if (GetRightHeadBucketNumber () >= 4)
+                        SetRightHeadBucketNumber (2);
+                  } else {
+                     SetLeftHeadBucketNumber ((int)IGCodeGenerator.ToolHeadType.Master);
+                     SetRightHeadBucketNumber ((int)IGCodeGenerator.ToolHeadType.Slave);
+                  }
 
                   IncrementCutScopeIndex ();
                   int csIdx = GetCutScopeIndex ();
@@ -205,8 +230,13 @@ namespace ProfileCAM.Presentation.Draw {
 
                   // Rewind will reset everything, so the cutscope index needs to be restored
                   SetCutScopeIndex (csIdx);
-                  SetLeftHeadBucketNumber (head1bno);
-                  SetLeftHeadBucketNumber (head2bno);
+                  if (MCSettings.It.Machine == MachineType.LCMMultipass2HNoDB) {
+                     SetLeftHeadBucketNumber (head1bno);
+                     SetLeftHeadBucketNumber (head2bno);
+                  } else {
+                     SetLeftHeadBucketNumber ((int)IGCodeGenerator.ToolHeadType.Master);
+                     SetRightHeadBucketNumber ((int)IGCodeGenerator.ToolHeadType.Slave);
+                  }
 
                   if (head == MCSettings.EHeads.Both) {
                      GenesysHub.Traces[0] = GenesysHub.CutScopeTraces[csIdx][0];
@@ -320,7 +350,10 @@ namespace ProfileCAM.Presentation.Draw {
             mPrevStepLen = MCSettings.It.StepLength;
             SetCutScopeIndex (0);
             SetLeftHeadBucketNumber (0);
-            SetRightHeadBucketNumber (2);
+            if (MCSettings.It.Machine == MachineType.LCMMultipass2HNoDB)
+               SetRightHeadBucketNumber (2);
+            else
+               SetRightHeadBucketNumber (1);
             Lux.StartContinuousRender (GFXCallback);
          }
       }
@@ -347,6 +380,9 @@ namespace ProfileCAM.Presentation.Draw {
          if (GenesysHub.CutScopeTraces == null) return;
          foreach (var cutScopeTooling in GenesysHub.CutScopeTraces)
             DrawGCode (cutScopeTooling);
+      }
+      public void DrawPartitions () {
+
       }
       public void DrawGCodeForCutScope () {
          // If simulation runs and when a new part is loaded, this 
@@ -422,8 +458,10 @@ namespace ProfileCAM.Presentation.Draw {
          List<List<GCodeSeg>> listOfListOfDrawables = [];
          if (cutScopeTooling[0].Count > 0) listOfListOfDrawables.Add (cutScopeTooling[0]);
          if (cutScopeTooling[1].Count > 0) listOfListOfDrawables.Add (cutScopeTooling[1]);
-         if (cutScopeTooling[2].Count > 0) listOfListOfDrawables.Add (cutScopeTooling[2]);
-         if (cutScopeTooling[3].Count > 0) listOfListOfDrawables.Add (cutScopeTooling[3]);
+         if (MCSettings.It.Machine == MachineType.LCMMultipass2HNoDB) {
+            if (cutScopeTooling[2].Count > 0) listOfListOfDrawables.Add (cutScopeTooling[2]);
+            if (cutScopeTooling[3].Count > 0) listOfListOfDrawables.Add (cutScopeTooling[3]);
+         }
          List<Action> drawActions = [];
          List<Point3> G0DrawPoints = [], G1DrawPoints = [];
          List<List<Point3>> G2DrawPoints = [], G3DrawPoints = [];

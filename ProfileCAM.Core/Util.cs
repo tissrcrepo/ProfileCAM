@@ -1562,6 +1562,13 @@ public static class Utils {
       //                   bounds.Max (b => b.ZMax));
    }
 
+   public static Bound3 CalculateBound3 (Frame frame) {
+      var bounds = CalculateBound3 (frame.FrameToolScopesH11);
+      bounds += CalculateBound3 (frame.FrameToolScopesH12);
+      bounds += CalculateBound3 (frame.FrameToolScopesH21);
+      bounds += CalculateBound3 (frame.FrameToolScopesH22);
+      return bounds;
+   }
    public static Bound3 CalculateBound3 (Frame frame, IGCodeGenerator.ToolHeadType headType) {
       Bound3 bounds;
       if (headType == IGCodeGenerator.ToolHeadType.Master || headType == IGCodeGenerator.ToolHeadType.MasterB2) {
@@ -2235,8 +2242,102 @@ public static class Utils {
    /// <returns>Returns the List of G Codes, for Head 1 and Head 2, generated for each cut scope. 
    /// For a single pass legacy, the wrapper list holds only one Cut Scope's G Codes for Head 1 and Head 2</returns>
 #nullable enable
-   public static List<List<GCodeSeg>> ComputeGCode (IGCodeGenerator gcodeGen, bool testing = false, double tol = 1e-6) {
+   public static (List<List<GCodeSeg>> GCodeSegList, PartMultiFrames? PartMultiFrms) ComputeGCode_LCMMultipass2HNoDB (IGCodeGenerator gcodeGen, bool testing = false, double tol = 1e-6) {
       List<List<GCodeSeg>> traces = [[], [], [], []];
+      PartMultiFrames? partMultiFrames = null;
+      if (gcodeGen.Process.Workpiece == null)
+         return (traces, partMultiFrames);
+
+      // Check if the workpiece needs a multipass cutting
+      if (gcodeGen.EnableMultipassCut && gcodeGen.Process.Workpiece.Model.Bound.XMax - gcodeGen.Process.Workpiece.Model.Bound.XMin >= gcodeGen.MaxFrameLength)
+         gcodeGen.EnableMultipassCut = true;
+
+      if (testing)
+         gcodeGen.CreatePartition (gcodeGen.Process.Workpiece.Cuts, /*optimize*/false,
+                                   gcodeGen.Process.Workpiece.Model.Bound);
+      else {
+         // Sanity test might have changed the instance of setting properties
+         gcodeGen.SetFromMCSettings ();
+         gcodeGen.ResetBookKeepers ();
+      }
+      if (gcodeGen.EnableMultipassCut && MultiPassCuts.IsMultipassCutTask (gcodeGen.Process.Workpiece.Model)) {
+         
+            double MinFL = 800;
+            double MaxFL = gcodeGen.MaxFrameLength;
+
+            // Get all part multi frams.
+            partMultiFrames = new (gcodeGen, MinFL, tol);
+            partMultiFrames.Optimize ();
+            var optimalFrames = partMultiFrames.OptimalFrames ?? throw new Exception ($"Computation of Optimal frames for {MachineType.LCMMultipass2HNoDB} machine failed");
+            
+            // Check if a frame does not have a value
+            if (optimalFrames.Any (off => !off.HasValue))
+               throw new InvalidOperationException ("optimalFrames contains null elements");
+            
+            // Allocate heads to frames' toolscopes ( toolings) and set priorities
+            foreach( var f in optimalFrames) {
+               f!.Value.AllocateHeadsToToolScopes (IGCodeGenerator.ToolHeadType.Infer);
+               f!.Value.SetPrioriesToFeatures ();
+            }
+            var penaltyTime = optimalFrames.Sum (off => off!.Value.TotalProcessTime);
+            var waitTime = optimalFrames.Sum (off => off!.Value.WaitTime);
+            //if (optimalFrames != null)
+            //   foreach (var optFRame in optimalFrames)
+            //      if (optFRame.HasValue)
+            //         optFRame.Value.AllocateHeadsToToolScopes ();
+
+
+            // DEBUG
+            if (partMultiFrames.Work == null)
+               throw new Exception ("Workpiece is not set");
+
+            var cuts = partMultiFrames.Work.Cuts;
+            int nHoles = 0;
+
+            var tssSum = 0;
+            foreach (var oframe in optimalFrames) {
+               tssSum += oframe!.Value.FrameToolScopesH11.Count;
+               tssSum += oframe!.Value.FrameToolScopesH12.Count;
+               tssSum += oframe!.Value.FrameToolScopesH21.Count;
+               tssSum += oframe!.Value.FrameToolScopesH22.Count;
+            }
+
+            for (int ii = 0; ii < cuts.Count; ii++) {
+               var toolingItem = cuts[ii];
+               bool toTreatAsCutOut = CutOut.ToTreatAsCutOut (toolingItem.Segs, partMultiFrames.Work.Bound, MCSettings.It.MinCutOutLengthThreshold);
+               if ((toolingItem.IsHole () && !toTreatAsCutOut) || toolingItem.IsMark ()) {
+                  nHoles++;
+               }
+            }
+            if (nHoles != tssSum)
+               throw new Exception ("Holes in Part IS NOT EQUAL TO the tool scopes in partMultiFrames");
+
+
+            partMultiFrames.GenerateGCode ();
+
+            traces[0] = gcodeGen.CutScopeTraces[0][0];
+            traces[1] = gcodeGen.CutScopeTraces[0][1];
+            traces[2] = gcodeGen.CutScopeTraces[0][2];
+            traces[3] = gcodeGen.CutScopeTraces[0][3];
+         
+
+      }
+      //else { // Single cut process
+      //   var prevVal = gcodeGen.EnableMultipassCut;
+      //   gcodeGen.EnableMultipassCut = false;
+      //   gcodeGen.CreatePartition (gcodeGen.Process.Workpiece.Cuts, gcodeGen.OptimizePartition, gcodeGen.Process.Workpiece.Model.Bound);
+      //   gcodeGen.GenerateGCode (IGCodeGenerator.ToolHeadType.Master);
+      //   gcodeGen.GenerateGCode (IGCodeGenerator.ToolHeadType.Slave);
+      //   traces[0] = gcodeGen.CutScopeTraces[0][0];
+      //   traces[1] = gcodeGen.CutScopeTraces[0][1];
+      //   gcodeGen.EnableMultipassCut = prevVal;
+      //}
+      
+      return (traces, partMultiFrames);
+   }
+
+   public static List<List<GCodeSeg>>  ComputeGCode_SinglePassLegacy (IGCodeGenerator gcodeGen, bool testing = false, double tol = 1e-6) {
+      List<List<GCodeSeg>> traces = [[], []];
 
       if (gcodeGen.Process.Workpiece == null)
          throw new Exception ("Workpiece is not set at gcodeGen.Process.Workpiece");
@@ -2253,87 +2354,65 @@ public static class Utils {
          gcodeGen.SetFromMCSettings ();
          gcodeGen.ResetBookKeepers ();
       }
+
+      var prevVal = gcodeGen.EnableMultipassCut;
+      gcodeGen.EnableMultipassCut = false;
+      gcodeGen.CreatePartition (gcodeGen.Process.Workpiece.Cuts, gcodeGen.OptimizePartition, gcodeGen.Process.Workpiece.Model.Bound);
+      gcodeGen.GenerateGCode (IGCodeGenerator.ToolHeadType.Master);
+      gcodeGen.GenerateGCode (IGCodeGenerator.ToolHeadType.Slave);
+      traces[0] = gcodeGen.CutScopeTraces[0][0];
+      traces[1] = gcodeGen.CutScopeTraces[0][1];
+      gcodeGen.EnableMultipassCut = prevVal;
+
+      return traces;
+   }
+   public static (List<List<GCodeSeg>> GCodeSegList, MultiPassCuts? MultiPassCts) ComputeGCode_LCMMultipass2H (IGCodeGenerator gcodeGen, bool testing = false, double tol = 1e-6) {
+      List<List<GCodeSeg>> traces = [[], []];
+      MultiPassCuts? mpc = null;
+      if (gcodeGen.Process.Workpiece == null)
+         throw new Exception ("Workpiece is not set at gcodeGen.Process.Workpiece");
+
+      // Check if the workpiece needs a multipass cutting
+      if (gcodeGen.EnableMultipassCut && gcodeGen.Process.Workpiece.Model.Bound.XMax - gcodeGen.Process.Workpiece.Model.Bound.XMin >= gcodeGen.MaxFrameLength)
+         gcodeGen.EnableMultipassCut = true;
+
+      if (testing)
+         gcodeGen.CreatePartition (gcodeGen.Process.Workpiece.Cuts, /*optimize*/false,
+                                   gcodeGen.Process.Workpiece.Model.Bound);
+      else {
+         // Sanity test might have changed the instance of setting properties
+         gcodeGen.SetFromMCSettings ();
+         gcodeGen.ResetBookKeepers ();
+      }
       if (gcodeGen.EnableMultipassCut && MultiPassCuts.IsMultipassCutTask (gcodeGen.Process.Workpiece.Model)) {
-#if true
-         double MinFL = 800;
-         double MaxFL = gcodeGen.MaxFrameLength;
+         { // OLder legacy machines 
+            mpc = new (gcodeGen);
 
-         // Get all part multi frams.
-         PartMultiFrames partMultiFrames = new (gcodeGen, MinFL, tol);
-         partMultiFrames.Optimize ();
-         var optimalFrames = partMultiFrames.OptimalFrames;
-         var penaltyTime = optimalFrames.Sum (off => off.Value.TotalProcessTime);
-         var waitTime = optimalFrames.Sum (off => off.Value.WaitTime);
-         if (optimalFrames != null)
-            foreach (var optFRame in optimalFrames)
-               if (optFRame.HasValue)
-                  optFRame.Value.AllocateHeadsToToolScopes ();
+            // Compute using Branch and Bound only if Toolings are below max features.
+            if (MCSettings.It.OptimizerType == MCSettings.EOptimize.Time) {
+               if (mpc.ToolingScopes.Count < MultiPassCuts.MaxFeatures)
+                  mpc.ComputeBranchAndBoundCutscopes ();
+               else mpc.ComputeSpatialOptimizationCutscopes ();
+            } else if (MCSettings.It.OptimizerType == MCSettings.EOptimize.DP)
+               mpc.ComputeDPOptimizationCutscopes ();
 
-
-         // DEBUG
-         var cuts = partMultiFrames.Work.Cuts;
-         int nHoles = 0;
-         
-         var tssSum = 0;
-         foreach (var oframe in optimalFrames) {
-            tssSum += oframe.Value.FrameToolScopesH11.Count;
-            tssSum += oframe.Value.FrameToolScopesH12.Count;
-            tssSum += oframe.Value.FrameToolScopesH21.Count;
-            tssSum += oframe.Value.FrameToolScopesH22.Count;
+            mpc.GenerateGCode ();
+            traces[0] = mpc.CutScopeTraces[0][0];
+            traces[1] = mpc.CutScopeTraces[0][1];
          }
 
-         for (int ii = 0; ii < cuts.Count; ii++) {
-            var toolingItem = cuts[ii];
-            bool toTreatAsCutOut = CutOut.ToTreatAsCutOut (toolingItem.Segs, partMultiFrames.Work.Bound, MCSettings.It.MinCutOutLengthThreshold);
-            if ((toolingItem.IsHole () && !toTreatAsCutOut) || toolingItem.IsMark ()) {
-               nHoles++;
-            }
-         }
-         if (nHoles != tssSum)
-            throw new Exception ("Holes in Part IS NOT EQUAL TO the tool scopes in partMultiFrames");
-
-
-         partMultiFrames.GenerateGCode ();
-
-         traces[0] = gcodeGen.CutScopeTraces[0][0];
-         traces[1] = gcodeGen.CutScopeTraces[0][1];
-         traces[2] = gcodeGen.CutScopeTraces[0][2];
-         traces[3] = gcodeGen.CutScopeTraces[0][3];
-      }
-
-      return traces;
-
-#else
-
-
-         // -----------------------------------------------------------------------------------------
-
-         MultiPassCuts mpc = new (gcodeGen);
-
-         // Compute using Branch and Bound only if Toolings are below max features.
-         if (MCSettings.It.OptimizerType == MCSettings.EOptimize.Time) {
-            if (mpc.ToolingScopes.Count < MultiPassCuts.MaxFeatures)
-               mpc.ComputeBranchAndBoundCutscopes ();
-            else mpc.ComputeSpatialOptimizationCutscopes ();
-         } else if (MCSettings.It.OptimizerType == MCSettings.EOptimize.DP)
-            mpc.ComputeDPOptimizationCutscopes ();
-
-         mpc.GenerateGCode ();
-         traces[0] = mpc.CutScopeTraces[0][0];
-         traces[1] = mpc.CutScopeTraces[0][1];
-      } else {
-         var prevVal = gcodeGen.EnableMultipassCut;
-         gcodeGen.EnableMultipassCut = false;
-         gcodeGen.CreatePartition (gcodeGen.Process.Workpiece.Cuts, gcodeGen.OptimizePartition, gcodeGen.Process.Workpiece.Model.Bound);
-         gcodeGen.GenerateGCode (IGCodeGenerator.ToolHeadType.Master);
-         gcodeGen.GenerateGCode (IGCodeGenerator.ToolHeadType.Slave);
-         traces[0] = gcodeGen.CutScopeTraces[0][0];
-         traces[1] = gcodeGen.CutScopeTraces[0][1];
-         gcodeGen.EnableMultipassCut = prevVal;
-      }
-      return traces;
-#endif
-
+      } 
+      //else { // Single cut process
+      //   var prevVal = gcodeGen.EnableMultipassCut;
+      //   gcodeGen.EnableMultipassCut = false;
+      //   gcodeGen.CreatePartition (gcodeGen.Process.Workpiece.Cuts, gcodeGen.OptimizePartition, gcodeGen.Process.Workpiece.Model.Bound);
+      //   gcodeGen.GenerateGCode (IGCodeGenerator.ToolHeadType.Master);
+      //   gcodeGen.GenerateGCode (IGCodeGenerator.ToolHeadType.Slave);
+      //   traces[0] = gcodeGen.CutScopeTraces[0][0];
+      //   traces[1] = gcodeGen.CutScopeTraces[0][1];
+      //   gcodeGen.EnableMultipassCut = prevVal;
+      //}
+      return (traces, mpc);
    }
 
    /// <summary>
@@ -2745,7 +2824,7 @@ public static class Utils {
       return res;
    }
 
-   public static ToolScopeList GetToolingScopes4Head (ToolScopeList tss, int headNo, MCSettings mcs) {
+   public static ToolScopeList SetPrioriesToFeatures (ToolScopeList tss, int headNo, MCSettings mcs) {
       // New priorities are set as per task FCH-35
       ToolScopeList res, holes = [];
       

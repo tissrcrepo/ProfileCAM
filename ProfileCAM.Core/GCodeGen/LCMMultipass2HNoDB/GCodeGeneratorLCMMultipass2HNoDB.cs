@@ -1105,16 +1105,16 @@ namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB {
                   var bucket1TSS = frame.Bucket11ToolScopes;
                   var bucket2TSS = frame.Bucket12ToolScopes;
                   BucketNumber = 0;
-                  tsWrittenB1 = GenerateGCode (ToolHeadType.Master, frame, bucket1TSS, ii + 1);
+                  tsWrittenB1 = GenerateGCode (ToolHeadType.Master, frame, bucket1TSS, ii + 1, frameChanged: true);
                   BucketNumber = 1;
-                  tsWrittenB2 = GenerateGCode (ToolHeadType.MasterB2, frame, bucket2TSS, ii + 1);
+                  tsWrittenB2 = GenerateGCode (ToolHeadType.MasterB2, frame, bucket2TSS, ii + 1, frameChanged: false);
                } else if (head == ToolHeadType.Slave) {
                   var bucket1TSS = frame.Bucket21ToolScopes;
                   var bucket2TSS = frame.Bucket22ToolScopes;
                   BucketNumber = 2;
-                  tsWrittenB1 = GenerateGCode (ToolHeadType.Slave, frame, bucket1TSS, ii + 1);
+                  tsWrittenB1 = GenerateGCode (ToolHeadType.Slave, frame, bucket1TSS, ii + 1, frameChanged: true);
                   BucketNumber = 3;
-                  tsWrittenB2 = GenerateGCode (ToolHeadType.SlaveB2, frame, bucket2TSS, ii + 1);
+                  tsWrittenB2 = GenerateGCode (ToolHeadType.SlaveB2, frame, bucket2TSS, ii + 1, frameChanged: false);
                }
                var t = CutScopeTraces;
             }
@@ -1137,18 +1137,26 @@ namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB {
       /// <exception cref="ArgumentOutOfRangeException"></exception>
       /// <exception cref="Exception"></exception>
       public int GenerateGCode (IGCodeGenerator.ToolHeadType head, Frame frame, ToolScopeList toolScopeList,
-         int frameNo) { // List<Tooling> is One Frame
+         int frameNo, bool frameChanged) { // List<Tooling> is One Frame
 
          // ** Compute Bounds of the current bucket **
-         Bound3 cutScopeBound = Utils.CalculateBound3 (frame, head);
+         //Bound3 cutScopeBound = Utils.CalculateBound3 (frame, head);
+         var cutScopeBound = Utils.CalculateBound3 (frame);
+         if (frameChanged == true) {
+            if (BucketNumber == 0) {
+               if (head != ToolHeadType.Master)
+                  throw new Exception ($"For Bucket number {BucketNumber} head is not {ToolHeadType.Master}");
 
-         if (BucketNumber == 0) {
-            // ** Set initial tooling positions **
-            mToolPos[0] = new Point3 (cutScopeBound.XMin, cutScopeBound.YMin, mSafeClearance);
-            mSafePoint[0] = new Point3 (cutScopeBound.XMin, cutScopeBound.YMin, 50);
+               // ** Set initial tooling positions **
+               mToolPos[0] = new Point3 (cutScopeBound.XMin, cutScopeBound.YMin, mSafeClearance);
+               mSafePoint[0] = new Point3 (cutScopeBound.XMin, cutScopeBound.YMin, 50);
+            } else if (BucketNumber == 2) {
+               if (head != ToolHeadType.Slave)
+                  throw new Exception ($"For Bucket number {BucketNumber} head is not {ToolHeadType.Slave}");
 
-            mToolPos[1] = new Point3 (cutScopeBound.XMax, cutScopeBound.YMax, mSafeClearance);
-            mSafePoint[1] = new Point3 (cutScopeBound.XMax, cutScopeBound.YMax, 50);
+               mToolPos[1] = new Point3 (cutScopeBound.XMax, cutScopeBound.YMax, mSafeClearance);
+               mSafePoint[1] = new Point3 (cutScopeBound.XMax, cutScopeBound.YMax, 50);
+            }
          }
 
          // Calculate the cutscope for all the buckets summed

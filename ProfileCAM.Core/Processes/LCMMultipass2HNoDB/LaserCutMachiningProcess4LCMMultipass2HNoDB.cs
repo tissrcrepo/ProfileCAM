@@ -4,6 +4,7 @@ using Flux.API;
 using ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB;
 using ProfileCAM.Core.GCodeGen;
 using ProfileCAM.Core.Processes;
+using ProfileCAM.Core.Optimizer;
 
 
 namespace ProfileCAM.Core.Processes.LCMMultipass2HNoDB {
@@ -14,10 +15,12 @@ namespace ProfileCAM.Core.Processes.LCMMultipass2HNoDB {
       List<List<GCodeSeg>> mTraces = [[], [], [], []];
       public List<List<GCodeSeg>> Traces { get => mTraces; }
       public List<List<GCodeSeg>[]> CutScopeTraces { get => mGCodeGenerator.CutScopeTraces; }
-
+      public PartMultiFrames? PartMultiFrms { get; set; }
       public void ClearTraces () {
          mTraces[0]?.Clear ();
          mTraces[1]?.Clear ();
+         mTraces[2]?.Clear ();
+         mTraces[3]?.Clear ();
          CutScopeTraces?.Clear ();
       }
       #endregion
@@ -102,7 +105,12 @@ namespace ProfileCAM.Core.Processes.LCMMultipass2HNoDB {
       //public void ComputeGCode (bool testing = false, double ratio = 0.5) {
       public void ComputeGCode (bool testing = false) {
          ClearZombies ();
-         mTraces = Utils.ComputeGCode (mGCodeGenerator, testing);
+         if (mGCodeGenerator.GCodeGenSettings.Machine == MachineType.LCMMultipass2HNoDB)
+            (mTraces, PartMultiFrms) = Utils.ComputeGCode_LCMMultipass2HNoDB (mGCodeGenerator, testing);
+         else if (mGCodeGenerator.GCodeGenSettings.Machine == MachineType.LCMLegacy)
+            mTraces = Utils.ComputeGCode_SinglePassLegacy (mGCodeGenerator, testing);
+         else
+            throw new Exception ("Unknown machine. Not supported");
       }
       #endregion
    }
