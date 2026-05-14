@@ -123,7 +123,10 @@ namespace ProfileCAM.Presentation.Draw {
             buckNo = GetLeftHeadBucketNumber ();
          else if (head == MCSettings.EHeads.Right)
             buckNo = GetRightHeadBucketNumber ();
+         var cutScIx = GetCutScopeIndex ();
+         if (GenesysHub.CutScopeTraces == null || GenesysHub.CutScopeTraces.Count == 0) return null;
 
+         GenesysHub.Traces[buckNo] = GenesysHub.CutScopeTraces[cutScIx][buckNo];
          if (GenesysHub.Traces[buckNo] == null || GenesysHub.MachiningTool == null) return null;
 
          if (mNextXFormIndex[(int)head].gCodeSegIndex >= GenesysHub.Traces[buckNo].Count) return null;
@@ -168,7 +171,7 @@ namespace ProfileCAM.Presentation.Draw {
          else if (MCSettings.It.Machine == MachineType.LCMMultipass2H ||
             MCSettings.It.Machine == MachineType.LCMLegacy)
             SetRightHeadBucketNumber (1);
-         if (GenesysHub.CutScopeTraces.Count > 0) {
+         if (GenesysHub.CutScopeTraces != null && GenesysHub.CutScopeTraces.Count > 0) {
             GenesysHub.Traces[0] = GenesysHub.CutScopeTraces[GetCutScopeIndex ()][0]; // Head 1 Bucket 11 OR Master Head for Legacy 2H
             GenesysHub.Traces[1] = GenesysHub.CutScopeTraces[GetCutScopeIndex ()][1]; // Head 1 Bucket 12 OR Slave Head for Legacy 2H
             if (MCSettings.It.Machine == MachineType.LCMMultipass2HNoDB) {
@@ -208,16 +211,20 @@ namespace ProfileCAM.Presentation.Draw {
                   if (MCSettings.It.Machine == MachineType.LCMMultipass2HNoDB) {
                      IncrementLeftHeadBucketNumber ();
                      IncrementRightHeadBucketNumber ();
-                     if (GetLeftHeadBucketNumber () >= 2)
+                     if (GetLeftHeadBucketNumber () == 2 && GetRightHeadBucketNumber () == 4)
+                        IncrementCutScopeIndex ();
+                     if (GetLeftHeadBucketNumber () == 2)
                         SetLeftHeadBucketNumber (0);
-                     if (GetRightHeadBucketNumber () >= 4)
+                     if (GetRightHeadBucketNumber () == 4)
                         SetRightHeadBucketNumber (2);
+                     
                   } else {
                      SetLeftHeadBucketNumber ((int)IGCodeGenerator.ToolHeadType.Master);
                      SetRightHeadBucketNumber ((int)IGCodeGenerator.ToolHeadType.Slave);
+                     IncrementCutScopeIndex ();
                   }
 
-                  IncrementCutScopeIndex ();
+                  
                   int csIdx = GetCutScopeIndex ();
                   int head1bno = GetLeftHeadBucketNumber ();
                   int head2bno = GetRightHeadBucketNumber ();
@@ -232,7 +239,7 @@ namespace ProfileCAM.Presentation.Draw {
                   SetCutScopeIndex (csIdx);
                   if (MCSettings.It.Machine == MachineType.LCMMultipass2HNoDB) {
                      SetLeftHeadBucketNumber (head1bno);
-                     SetLeftHeadBucketNumber (head2bno);
+                     SetRightHeadBucketNumber (head2bno);
                   } else {
                      SetLeftHeadBucketNumber ((int)IGCodeGenerator.ToolHeadType.Master);
                      SetRightHeadBucketNumber ((int)IGCodeGenerator.ToolHeadType.Slave);

@@ -1137,7 +1137,7 @@ namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB {
       /// <exception cref="ArgumentOutOfRangeException"></exception>
       /// <exception cref="Exception"></exception>
       public int GenerateGCode (IGCodeGenerator.ToolHeadType head, Frame frame, ToolScopeList toolScopeList,
-         int frameNo, bool frameChanged) { // List<Tooling> is One Frame
+         int frameNo, bool frameChanged) { // List<Tooling> is One Frame 
 
          // ** Compute Bounds of the current bucket **
          //Bound3 cutScopeBound = Utils.CalculateBound3 (frame, head);
@@ -1346,8 +1346,8 @@ namespace ProfileCAM.Core.GCodeGen.LCMMultipass2HNoDB {
          totalCuts.AddRange (cuts);
 
          // Update Traces for this cutscope
-         var cutScope = CutScopeTraces[mFrameNo - 1];
-         cutScope[BucketNumber] = Traces[BucketNumber];
+         //var cutScope = CutScopeTraces[mFrameNo - 1];
+         CutScopeTraces[mFrameNo - 1][BucketNumber] = Traces[BucketNumber];
          //for (int i = 0; i < 4; i++) {
          //   if (cutScope[i].Count == 0)
          //      cutScope[i] = Traces[i];
